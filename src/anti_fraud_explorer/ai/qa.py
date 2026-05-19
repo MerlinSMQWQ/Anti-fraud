@@ -8,7 +8,7 @@ import textwrap
 from dataclasses import dataclass
 from typing import Any
 
-from .. import config
+from ..config import settings
 from ..dataset import CaseItem, KnowledgeBase, item_to_dict, normalize_text
 from ..search import normalize_search_query, search_items
 
@@ -39,7 +39,7 @@ def answer_question(kb: KnowledgeBase, question: str, category: str = "", includ
         answer = "没有在数据集中找到足够相关的资料。"
         return Answer(answer=answer, mode="no_context", sources=[], speech=answer if include_speech else "")
 
-    if config.AI_API_KEY:
+    if settings.ai_api_key:
         try:
             answer = call_chat_model(question, sources)
             return Answer(

@@ -14,10 +14,18 @@ dependencies = [
     "zhipuai>=2.1,<3",
     "sniffio>=1.3,<2",
     "pypinyin>=0.51,<1",
+    "pydantic-settings>=2.0",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
 anti-fraud-agent = "anti_fraud_explorer.web:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

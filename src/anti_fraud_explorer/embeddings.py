@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from . import config
+from .config import settings
 from .dataset import CaseItem, KnowledgeBase, normalize_text
 
 
@@ -65,12 +65,12 @@ class EmbeddingClient:
         max_retries: int | None = None,
         retry_backoff: float | None = None,
     ):
-        self.api_key = config.EMBEDDING_API_KEY if api_key is None else api_key
-        self.base_url = (config.EMBEDDING_BASE_URL if base_url is None else base_url).rstrip("/")
-        self.model = config.EMBEDDING_MODEL if model is None else model
-        self.timeout = config.EMBEDDING_TIMEOUT if timeout is None else timeout
-        self.max_retries = config.EMBEDDING_MAX_RETRIES if max_retries is None else max_retries
-        self.retry_backoff = config.EMBEDDING_RETRY_BACKOFF if retry_backoff is None else retry_backoff
+        self.api_key = settings.embedding_api_key if api_key is None else api_key
+        self.base_url = (settings.embedding_base_url if base_url is None else base_url).rstrip("/")
+        self.model = settings.embedding_model if model is None else model
+        self.timeout = settings.embedding_timeout if timeout is None else timeout
+        self.max_retries = settings.embedding_max_retries if max_retries is None else max_retries
+        self.retry_backoff = settings.embedding_retry_backoff if retry_backoff is None else retry_backoff
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not self.api_key:
@@ -109,7 +109,7 @@ class EmbeddingClient:
 
 
 def build_embedding_text(item: CaseItem, max_chars: int | None = None) -> str:
-    max_chars = config.EMBEDDING_TEXT_MAX_CHARS if max_chars is None else max_chars
+    max_chars = settings.embedding_text_max_chars if max_chars is None else max_chars
     parts = [
         f"名称：{item.title}",
         f"系列：{item.family}" if item.family else "",
@@ -126,7 +126,7 @@ def build_index_payload(
     client: EmbeddingClient,
     batch_size: int | None = None,
 ) -> dict[str, Any]:
-    batch_size = config.EMBEDDING_BATCH_SIZE if batch_size is None else batch_size
+    batch_size = settings.embedding_batch_size if batch_size is None else batch_size
     rows: list[dict[str, Any]] = []
     dimensions = 0
     for start in range(0, len(kb.items), batch_size):
@@ -156,7 +156,7 @@ def build_index_payload(
 
 
 def write_index(payload: dict[str, Any], path: Path | None = None) -> None:
-    path = config.EMBEDDING_INDEX_PATH if path is None else path
+    path = settings.embedding_index_path if path is None else path
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
@@ -175,7 +175,7 @@ def _load_embedding_index(path_text: str) -> EmbeddingIndex | None:
 
 
 def load_embedding_index(path: Path | None = None) -> EmbeddingIndex | None:
-    path = config.EMBEDDING_INDEX_PATH if path is None else path
+    path = settings.embedding_index_path if path is None else path
     return _load_embedding_index(str(path))
 
 
@@ -202,7 +202,7 @@ def embedding_scores(
     records = {record.item_id: record.vector for record in index.records}
     candidate_ids = {item.id for item in candidates}
     known_ids = {item.id for item in kb.items}
-    threshold = config.EMBEDDING_MIN_SCORE if min_score is None else min_score
+    threshold = settings.embedding_min_score if min_score is None else min_score
     scores: dict[str, float] = {}
     for item_id, vector in records.items():
         if item_id not in candidate_ids or item_id not in known_ids:

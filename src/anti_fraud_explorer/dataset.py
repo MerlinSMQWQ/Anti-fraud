@@ -9,12 +9,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .config import DATASET_PATH
+from .config import settings
 
 if TYPE_CHECKING:
     from .extractor import SoftLabels, StructuredMeta
 
-_AI_FIELDS_PATH = DATASET_PATH.parent / "ai_fields.json"
+_AI_FIELDS_PATH = settings.dataset_path.parent / "ai_fields.json"
 
 
 def normalize_text(value: str) -> str:
@@ -121,7 +121,9 @@ class KnowledgeBase:
         return [category.name for category in self.categories]
 
 
-def load_dataset(path: Path = DATASET_PATH) -> KnowledgeBase:
+def load_dataset(path: Path | None = None) -> KnowledgeBase:
+    if path is None:
+        path = settings.dataset_path
     with path.open("r", encoding="utf-8") as f:
         return KnowledgeBase(json.load(f))
 

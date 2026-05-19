@@ -502,7 +502,7 @@ class QueryAnalyzer:
             TaskType.FACT_QA: 5,
             TaskType.COMPARISON: 8,
             TaskType.RECOMMENDATION: 10,
-            TaskType.EXHIBITION_PLAN: 5,
+            TaskType.LECTURE_PLAN: 5,
             TaskType.STUDY_TASK: 5,
             TaskType.CONTENT_TRANSFORM: 5,
             TaskType.BROWSE_QUERY: 30,

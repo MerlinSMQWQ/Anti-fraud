@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from .. import config
+from ..config import settings
 from ..agent_models import AgentDecision, TaskType, task_type_from_str
 from ..dataset import KnowledgeBase, normalize_text
 
@@ -13,9 +13,9 @@ from ..dataset import KnowledgeBase, normalize_text
 def call_agent_planner_model(
     query: str, kb: KnowledgeBase, category: str = '', context: dict | None = None,
 ) -> AgentDecision:
-    if not config.AI_AGENT_PLANNER:
+    if not settings.ai_agent_planner:
         raise RuntimeError('AI_AGENT_PLANNER is disabled')
-    if not config.AI_API_KEY:
+    if not settings.ai_api_key:
         raise RuntimeError('AI_API_KEY is not configured')
     from ..http_client import chat_completion
 
@@ -87,13 +87,13 @@ def build_agent_planner_messages(
                 '你是识诈智能体的内部规划器，用户不可见，不直接编造资料。'
                 '你的任务只是在后台决定下一步行动，不是扮演最终回答者。'
                 '可选任务类型：chitchat, fact_qa, browse_query, comparison, recommendation, '
-                'exhibition_plan, study_task, content_transform。'
+                'lecture_plan, study_task, content_transform。'
                 '可选动作：direct_answer（身份/能力/寒暄/越界说明）、retrieval_tool（查资料库）、'
                 'rule_handler（筛选/对比/推荐/策划/教案）、llm_generation（基于检索资料生成）。'
                 '任务边界：content_transform 用于把一个或多个反诈案例改写成口播稿、提醒文案、双语文案、'
                 '海报文案、短视频脚本、年轻化版本等成稿内容；'
                 'study_task 用于班会、课程、学习单、课堂活动、互动提问等教学设计；'
-                'exhibition_plan 用于社区宣传角、校园宣传栏、反诈讲座流程、专题宣传方案等展示方案。'
+                'lecture_plan 用于社区宣传角、校园宣传栏、反诈讲座流程、专题宣传方案等展示方案。'
                 '如果用户要求为单个案例整理口播稿或提醒稿，优先选择 content_transform，'
                 "不要因为出现「讲解」就归为 study_task，也不要因为用于宣传场景就误判。"
                 "如果有对话历史上下文，你必须理解其中的指代关系，"
@@ -126,7 +126,7 @@ def _context_item_titles(items) -> list[str]:
 
 def agent_planner_extra_options() -> dict[str, Any]:
     opts: dict[str, Any] = {"response_format": {"type": "json_object"}}
-    model = config.AI_MODEL.lower()
+    model = settings.ai_model.lower()
     if any(name in model for name in ("glm-4.5", "glm-4.6", "glm-4.7", "glm-5")):
         opts["thinking"] = {"type": "disabled"}
     return opts

@@ -11,7 +11,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
-from .. import config
+from ..config import settings
 from ..agent_models import (
     AgentDecision,
     AgentResult,
@@ -111,7 +111,7 @@ class Agent:
     MVP dispatches 3 TaskTypes with dedicated pipelines:
       - BROWSE_QUERY    -> structured filters + local listing (no LLM)
       - RECOMMENDATION  -> SoftLabels matching + rule scoring
-      - EXHIBITION_PLAN -> recommendation sub-pipeline + template
+      - LECTURE_PLAN -> recommendation sub-pipeline + template
     All other types fall through to the existing answer_question flow.
     """
 
@@ -207,7 +207,7 @@ class Agent:
         retrieval_note = initial_note
         warnings: list[str] = []
 
-        if not config.AI_API_KEY:
+        if not settings.ai_api_key:
             yield self._progress_event("generate", "整理结论", "未配置模型 Key，使用本地案例资料直接回答。")
             result, decision = self._subsequent_fallback_result(
                 query=query,
@@ -446,7 +446,7 @@ class Agent:
             "JSON 格式："
             "{\"action\":\"answer|search\","
             "\"task_type\":\"chitchat|fact_qa|browse_query|comparison|recommendation|"
-            "exhibition_plan|study_task|content_transform\","
+            "lecture_plan|study_task|content_transform\",\"
             "\"confidence\":0.0,\"reason\":\"一句内部理由\","
             "\"search_queries\":[\"关键词\"]或null,"
             "\"answer\":\"回答文本\"或null,"
@@ -1310,7 +1310,7 @@ class Agent:
         context_lines.append(f"正文片段：{target_item.content[:800]}")
         context = "\n".join(context_lines)
 
-        if config.AI_API_KEY:
+        if settings.ai_api_key:
             try:
                 answer_text = _call_transform_model(
                     transform_type=transform_type,
@@ -1442,7 +1442,7 @@ class Agent:
         scene_desc = f"场景：{scenario}" if scenario else ""
         audience_desc = f"受众：{audience}" if audience else ""
         try:
-            if not config.AI_API_KEY:
+            if not settings.ai_api_key:
                 raise RuntimeError("AI_API_KEY is not configured")
             response = chat_completion(
                 [
@@ -1562,7 +1562,7 @@ class Agent:
         )
 
     def _handle_exhibition(self, analysis) -> AgentResult:
-        """EXHIBITION_PLAN: recommendation sub-pipeline + exhibition template."""
+        """LECTURE_PLAN: recommendation sub-pipeline + exhibition template."""
         # For "一个小展", first gather a small candidate pool, then pick one core item.
         rec_analysis = analysis
         if analysis.item_count == 1:
@@ -1582,7 +1582,7 @@ class Agent:
                 rec.evidence = [rec.evidence[min(selected_index, len(rec.evidence) - 1)]]
             rec.selection_reason = selected_reason or f"先筛出 {len(rec_analysis.items) if hasattr(rec_analysis, 'items') else max(analysis.retrieval_count, 5)} 个候选，再确定 1 个核心案例"
 
-        rec.task_type = TaskType.EXHIBITION_PLAN
+        rec.task_type = TaskType.LECTURE_PLAN
 
         scene = analysis.scenario or "反诈宣传"
         audience = analysis.audience or "公众"
@@ -1604,7 +1604,7 @@ class Agent:
             })
 
         rec.answer = _render_template(
-            "exhibition_plan.md.j2",
+            "lecture_plan.md.j2",
             scene=scene,
             audience=audience,
             time_budget=time_budget,
@@ -1793,7 +1793,7 @@ def _select_exhibition_core_item(
         return 0, ""
     if len(candidate_items) == 1:
         return 0, "用户要求 1 个核心案例，当前候选仅 1 个。"
-    if not config.AI_API_KEY:
+    if not settings.ai_api_key:
         return 0, f"先筛出 {len(candidate_items)} 个候选，再按当前排序取第 1 个核心案例。"
 
     from ..http_client import chat_completion
@@ -1936,7 +1936,7 @@ def _fallback_task_type(query: str) -> TaskType:
     if re.search(r"班会|课堂|任务单|教学|宣教任务", text):
         return TaskType.STUDY_TASK
     if re.search(r"策划|宣传角|宣传栏|方案|流程", text):
-        return TaskType.EXHIBITION_PLAN
+        return TaskType.LECTURE_PLAN
     if re.search(r"改写|改成|口播|文案|双语|翻译|海报|短视频|提醒稿", text):
         return TaskType.CONTENT_TRANSFORM
     return TaskType.FACT_QA

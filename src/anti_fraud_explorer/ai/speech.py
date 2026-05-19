@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
-from .. import config
+from ..config import settings
 from ..dataset import CaseItem, normalize_text
 from ..ai.context import build_context, extract_structured_field, clean_knowledge_text
 from ..ai.prompts import get_emoji_re, qa_system_prompt, speech_system_prompt
@@ -15,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def build_messages(question: str, sources: list[CaseItem]) -> list[dict[str, str]]:
-    context = build_context(sources, config.AI_MAX_CONTEXT_CHARS)
+    context = build_context(sources, settings.ai_max_context_chars)
     return [
         {
             "role": "system",
@@ -62,7 +62,7 @@ def build_spoken_answer(
 ) -> str:
     from ..ai.client import call_speech_model, describe_model_error
 
-    if prefer_model and config.AI_API_KEY:
+    if prefer_model and settings.ai_api_key:
         try:
             spoken = call_speech_model(answer, question=question, sources=sources or [], max_chars=max_chars)
             spoken = clean_spoken_output(spoken, max_chars=max_chars)

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib import request
 
-from . import config
+from .config import settings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class TTSAudio:
 
 def openai_tts_available() -> bool:
     """True when explicitly enabled and AI API key is configured."""
-    return config.OPENAI_TTS_ENABLED and bool(config.AI_API_KEY) and bool(config.AI_BASE_URL)
+    return settings.openai_tts_enabled and bool(settings.ai_api_key) and bool(settings.ai_base_url)
 
 
 def server_tts_available() -> bool:
@@ -48,11 +48,11 @@ def server_tts_engine() -> str:
 
 
 def volc_tts_available() -> bool:
-    if not config.VOLC_TTS_ENABLED:
+    if not settings.volc_tts_enabled:
         return False
     if _use_v3_api():
-        return bool(config.VOLC_TTS_API_KEY or (config.VOLC_TTS_APP_ID and config.VOLC_TTS_ACCESS_TOKEN))
-    return bool(config.VOLC_TTS_APP_ID and config.VOLC_TTS_ACCESS_TOKEN and config.VOLC_TTS_CLUSTER)
+        return bool(settings.volc_tts_api_key or (settings.volc_tts_app_id and settings.volc_tts_access_token))
+    return bool(settings.volc_tts_app_id and settings.volc_tts_access_token and settings.volc_tts_cluster)
 
 
 def synthesize_speech_to_file(text: str) -> TTSAudio | None:
@@ -60,11 +60,11 @@ def synthesize_speech_to_file(text: str) -> TTSAudio | None:
     if not text:
         return None
 
-    cache_dir = config.TTS_CACHE_DIR
+    cache_dir = settings.tts_cache_dir
     cache_dir.mkdir(parents=True, exist_ok=True)
     encoding = "mp3"  # OpenAI TTS uses mp3; Volcengine configured encoding
     if volc_tts_available():
-        encoding = config.VOLC_TTS_ENCODING
+        encoding = settings.volc_tts_encoding
     path = cache_dir / f"{_cache_key(text)}.{encoding}"
     if path.is_file() and path.stat().st_size > 0:
         engine = "volcengine" if volc_tts_available() else "openai"
@@ -108,7 +108,7 @@ def _openai_tts_bytes(text: str) -> bytes | None:
     """Call OpenAI-compatible /v1/audio/speech endpoint."""
     import httpx
 
-    url = config.AI_BASE_URL.rstrip("/") + "/v1/audio/speech"
+    url = settings.ai_base_url.rstrip("/") + "/v1/audio/speech"
     payload = {
         "model": "tts-1",
         "input": text,
@@ -117,7 +117,7 @@ def _openai_tts_bytes(text: str) -> bytes | None:
         "speed": 1.0,
     }
     headers = {
-        "Authorization": f"Bearer {config.AI_API_KEY}",
+        "Authorization": f"Bearer {settings.ai_api_key}",
         "Content-Type": "application/json",
     }
     try:
@@ -136,7 +136,7 @@ def _chunk_bytes(data: bytes, size: int = 32768) -> Iterator[bytes]:
 
 
 def valid_tts_filename(filename: str) -> bool:
-    suffix = re.escape(config.VOLC_TTS_ENCODING)
+    suffix = re.escape(settings.volc_tts_encoding)
     return bool(re.fullmatch(rf"[a-f0-9]{{64}}\.{suffix}", filename))
 
 
@@ -163,11 +163,11 @@ def _synthesize_v1_chunk(text: str) -> bytes:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer;{config.VOLC_TTS_ACCESS_TOKEN}",
+        "Authorization": f"Bearer;{settings.volc_tts_access_token}",
     }
-    req = request.Request(config.VOLC_TTS_ENDPOINT, data=body, headers=headers, method="POST")
+    req = request.Request(settings.volc_tts_endpoint, data=body, headers=headers, method="POST")
     try:
-        with request.urlopen(req, timeout=config.VOLC_TTS_TIMEOUT) as response:
+        with request.urlopen(req, timeout=settings.volc_tts_timeout) as response:
             response_body = response.read()
     except Exception as exc:  # noqa: BLE001 - TTS must not leak vendor/client internals upward.
         raise VolcTTSError("Volcengine TTS request failed") from exc
@@ -193,9 +193,9 @@ def _synthesize_v3_chunk(text: str) -> bytes:
     payload = _v3_request_payload(text)
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = _v3_headers()
-    req = request.Request(config.VOLC_TTS_V3_ENDPOINT, data=body, headers=headers, method="POST")
+    req = request.Request(settings.volc_tts_v3_endpoint, data=body, headers=headers, method="POST")
     try:
-        with request.urlopen(req, timeout=config.VOLC_TTS_TIMEOUT) as response:
+        with request.urlopen(req, timeout=settings.volc_tts_timeout) as response:
             response_body = response.read()
     except Exception as exc:  # noqa: BLE001 - TTS must not leak vendor/client internals upward.
         raise VolcTTSError("Volcengine TTS v3 request failed") from exc
@@ -206,9 +206,9 @@ def _stream_v3_chunk(text: str) -> Iterator[bytes]:
     payload = _v3_request_payload(text)
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = _v3_headers()
-    req = request.Request(config.VOLC_TTS_V3_ENDPOINT, data=body, headers=headers, method="POST")
+    req = request.Request(settings.volc_tts_v3_endpoint, data=body, headers=headers, method="POST")
     try:
-        with request.urlopen(req, timeout=config.VOLC_TTS_TIMEOUT) as response:
+        with request.urlopen(req, timeout=settings.volc_tts_timeout) as response:
             yielded = False
             for data in _iter_v3_response_events(response):
                 audio = _audio_from_v3_event(data)
@@ -225,14 +225,14 @@ def _v3_headers() -> dict[str, str]:
     headers = {
         "Content-Type": "application/json",
         "Connection": "keep-alive",
-        "X-Api-Resource-Id": config.VOLC_TTS_RESOURCE_ID,
+        "X-Api-Resource-Id": settings.volc_tts_resource_id,
         "X-Api-Request-Id": str(uuid.uuid4()),
     }
-    if config.VOLC_TTS_API_KEY:
-        headers["X-Api-Key"] = config.VOLC_TTS_API_KEY
+    if settings.volc_tts_api_key:
+        headers["X-Api-Key"] = settings.volc_tts_api_key
     else:
-        headers["X-Api-App-Key"] = config.VOLC_TTS_APP_ID
-        headers["X-Api-Access-Key"] = config.VOLC_TTS_ACCESS_TOKEN
+        headers["X-Api-App-Key"] = settings.volc_tts_app_id
+        headers["X-Api-Access-Key"] = settings.volc_tts_access_token
     return headers
 
 
@@ -309,20 +309,20 @@ def _audio_from_v3_event(data: dict) -> bytes:
 
 def _v1_request_payload(text: str) -> dict:
     audio = {
-        "voice_type": config.VOLC_TTS_VOICE_TYPE,
-        "encoding": config.VOLC_TTS_ENCODING,
-        "rate": config.VOLC_TTS_RATE,
-        "speed_ratio": config.VOLC_TTS_SPEED_RATIO,
-        "volume_ratio": config.VOLC_TTS_VOLUME_RATIO,
-        "pitch_ratio": config.VOLC_TTS_PITCH_RATIO,
+        "voice_type": settings.volc_tts_voice_type,
+        "encoding": settings.volc_tts_encoding,
+        "rate": settings.volc_tts_rate,
+        "speed_ratio": settings.volc_tts_speed_ratio,
+        "volume_ratio": settings.volc_tts_volume_ratio,
+        "pitch_ratio": settings.volc_tts_pitch_ratio,
     }
-    if config.VOLC_TTS_EMOTION:
-        audio["emotion"] = config.VOLC_TTS_EMOTION
+    if settings.volc_tts_emotion:
+        audio["emotion"] = settings.volc_tts_emotion
     return {
         "app": {
-            "appid": config.VOLC_TTS_APP_ID,
-            "token": config.VOLC_TTS_ACCESS_TOKEN,
-            "cluster": config.VOLC_TTS_CLUSTER,
+            "appid": settings.volc_tts_app_id,
+            "token": settings.volc_tts_access_token,
+            "cluster": settings.volc_tts_cluster,
         },
         "user": {"uid": "anti-fraud-web"},
         "audio": audio,
@@ -338,17 +338,17 @@ def _v1_request_payload(text: str) -> dict:
 def _v3_request_payload(text: str) -> dict:
     req_params = {
         "text": text,
-        "speaker": config.VOLC_TTS_VOICE_TYPE,
+        "speaker": settings.volc_tts_voice_type,
         "audio_params": {
-            "format": config.VOLC_TTS_ENCODING,
-            "sample_rate": config.VOLC_TTS_RATE,
-            "speech_rate": _ratio_to_percent(config.VOLC_TTS_SPEED_RATIO),
-            "loudness_rate": _ratio_to_percent(config.VOLC_TTS_VOLUME_RATIO),
+            "format": settings.volc_tts_encoding,
+            "sample_rate": settings.volc_tts_rate,
+            "speech_rate": _ratio_to_percent(settings.volc_tts_speed_ratio),
+            "loudness_rate": _ratio_to_percent(settings.volc_tts_volume_ratio),
         },
     }
-    if config.VOLC_TTS_EMOTION:
-        req_params["emotion"] = config.VOLC_TTS_EMOTION
-        req_params["emotion_scale"] = config.VOLC_TTS_EMOTION_SCALE
+    if settings.volc_tts_emotion:
+        req_params["emotion"] = settings.volc_tts_emotion
+        req_params["emotion_scale"] = settings.volc_tts_emotion_scale
     return {
         "user": {"uid": "anti-fraud-web"},
         "req_params": req_params,
@@ -356,8 +356,8 @@ def _v3_request_payload(text: str) -> dict:
 
 
 def _use_v3_api() -> bool:
-    version = str(config.VOLC_TTS_API_VERSION or "auto").strip().lower()
-    return version == "v3" or (version == "auto" and bool(config.VOLC_TTS_API_KEY))
+    version = str(settings.volc_tts_api_version or "auto").strip().lower()
+    return version == "v3" or (version == "auto" and bool(settings.volc_tts_api_key))
 
 
 def _ratio_to_percent(value: float) -> int:
@@ -365,7 +365,7 @@ def _ratio_to_percent(value: float) -> int:
 
 
 def _text_chunks(text: str) -> list[str]:
-    max_bytes = max(120, config.VOLC_TTS_MAX_CHUNK_BYTES)
+    max_bytes = max(120, settings.volc_tts_max_chunk_bytes)
     chunks: list[str] = []
     current = ""
     for piece in _sentence_pieces(text):
@@ -410,15 +410,15 @@ def _split_by_bytes(text: str, max_bytes: int) -> tuple[str, str]:
 def _cache_key(text: str) -> str:
     options = {
         "api_version": "v3" if _use_v3_api() else "v1",
-        "resource_id": config.VOLC_TTS_RESOURCE_ID,
-        "voice_type": config.VOLC_TTS_VOICE_TYPE,
-        "emotion": config.VOLC_TTS_EMOTION,
-        "emotion_scale": config.VOLC_TTS_EMOTION_SCALE,
-        "encoding": config.VOLC_TTS_ENCODING,
-        "rate": config.VOLC_TTS_RATE,
-        "speed_ratio": config.VOLC_TTS_SPEED_RATIO,
-        "volume_ratio": config.VOLC_TTS_VOLUME_RATIO,
-        "pitch_ratio": config.VOLC_TTS_PITCH_RATIO,
+        "resource_id": settings.volc_tts_resource_id,
+        "voice_type": settings.volc_tts_voice_type,
+        "emotion": settings.volc_tts_emotion,
+        "emotion_scale": settings.volc_tts_emotion_scale,
+        "encoding": settings.volc_tts_encoding,
+        "rate": settings.volc_tts_rate,
+        "speed_ratio": settings.volc_tts_speed_ratio,
+        "volume_ratio": settings.volc_tts_volume_ratio,
+        "pitch_ratio": settings.volc_tts_pitch_ratio,
         "text": text,
     }
     raw = json.dumps(options, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -430,7 +430,7 @@ def _clean_text(text: str) -> str:
 
 
 def _mime_type(encoding: str = "") -> str:
-    enc = (encoding or config.VOLC_TTS_ENCODING).lower()
+    enc = (encoding or settings.volc_tts_encoding).lower()
     return {
         "mp3": "audio/mpeg",
         "ogg": "audio/ogg",

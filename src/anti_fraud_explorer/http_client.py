@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from . import config
+from .config import settings
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def chat_completion(
         return _zhipu_completion(messages, temperature, max_tokens, extra_options)
 
     payload: dict[str, Any] = {
-        "model": config.AI_MODEL,
+        "model": settings.ai_model,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
@@ -44,9 +44,9 @@ def chat_completion(
         payload.update(extra_options)
 
     client = get_http_client()
-    url = config.AI_BASE_URL.rstrip("/") + "/chat/completions"
+    url = settings.ai_base_url.rstrip("/") + "/chat/completions"
     headers = {
-        "Authorization": f"Bearer {config.AI_API_KEY}",
+        "Authorization": f"Bearer {settings.ai_api_key}",
         "Content-Type": "application/json",
     }
     try:
@@ -62,18 +62,18 @@ def chat_completion(
 
 def embedding_request(texts: list[str]) -> list[list[float]]:
     """Send an embedding request."""
-    if not config.EMBEDDING_API_KEY:
+    if not settings.embedding_api_key:
         raise RuntimeError("EMBEDDING_API_KEY is not configured.")
     if not texts:
         return []
 
     client = get_http_client()
-    url = config.EMBEDDING_BASE_URL.rstrip("/") + "/embeddings"
+    url = settings.embedding_base_url.rstrip("/") + "/embeddings"
     headers = {
-        "Authorization": f"Bearer {config.EMBEDDING_API_KEY}",
+        "Authorization": f"Bearer {settings.embedding_api_key}",
         "Content-Type": "application/json",
     }
-    payload = {"model": config.EMBEDDING_MODEL, "input": texts}
+    payload = {"model": settings.embedding_model, "input": texts}
     try:
         response = client.post(url, json=payload, headers=headers)
         response.raise_for_status()
@@ -106,7 +106,7 @@ def describe_error(exc: Exception, api_key: str = "") -> str:
 
 def _should_use_zhipu_sdk() -> bool:
     from urllib.parse import urlparse
-    host = urlparse(config.AI_BASE_URL).hostname or ""
+    host = urlparse(settings.ai_base_url).hostname or ""
     return host.endswith("bigmodel.cn")
 
 
@@ -118,7 +118,7 @@ def _zhipu_completion(
 ) -> str:
     from zhipuai import ZhipuAI
 
-    model = config.AI_MODEL.lower()
+    model = settings.ai_model.lower()
     extra: dict[str, Any] = {}
     if any(name in model for name in ("glm-4.5", "glm-4.6", "glm-4.7", "glm-5")):
         extra["thinking"] = {"type": "disabled"}
@@ -126,13 +126,13 @@ def _zhipu_completion(
         extra.update(extra_options)
 
     client_zhipu = ZhipuAI(
-        api_key=config.AI_API_KEY,
-        base_url=config.AI_BASE_URL.rstrip("/"),
-        timeout=int(config.AI_TIMEOUT),
+        api_key=settings.ai_api_key,
+        base_url=settings.ai_base_url.rstrip("/"),
+        timeout=int(settings.ai_timeout),
         max_retries=0,
     )
     response = client_zhipu.chat.completions.create(
-        model=config.AI_MODEL,
+        model=settings.ai_model,
         messages=messages,
         temperature=temperature,
         top_p=0.8,

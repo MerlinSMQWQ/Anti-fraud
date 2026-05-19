@@ -7,7 +7,7 @@ import re
 from collections.abc import Iterable
 from functools import lru_cache
 
-from . import config
+from .config import settings
 from .dataset import CaseItem, KnowledgeBase, normalize_text
 
 
@@ -222,7 +222,7 @@ def search_items(
     ranked = rank_lexical(candidates, lowered_query, tokens)
 
     using_hybrid = False
-    if config.SEARCH_USE_EMBEDDING:
+    if settings.search_use_embedding:
         try:
             ranked = rank_hybrid(kb, candidates, lowered_query, tokens)
             using_hybrid = True

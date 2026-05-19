@@ -18,7 +18,7 @@ class TaskType(enum.Enum):
     BROWSE_QUERY = "browse_query"
     COMPARISON = "comparison"
     RECOMMENDATION = "recommendation"
-    EXHIBITION_PLAN = "exhibition_plan"
+    LECTURE_PLAN = "lecture_plan"
     STUDY_TASK = "study_task"
     CONTENT_TRANSFORM = "content_transform"
 
@@ -96,7 +96,7 @@ _TASK_TYPE_LABELS = {
     TaskType.BROWSE_QUERY: "资料筛选",
     TaskType.COMPARISON: "案例对比",
     TaskType.RECOMMENDATION: "案例推荐",
-    TaskType.EXHIBITION_PLAN: "展示策划",
+    TaskType.LECTURE_PLAN: "展示策划",
     TaskType.STUDY_TASK: "宣教任务",
     TaskType.CONTENT_TRANSFORM: "内容转化",
 }

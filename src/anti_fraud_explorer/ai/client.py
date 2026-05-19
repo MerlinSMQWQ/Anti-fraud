@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from .. import config
+from ..config import settings
 from ..dataset import CaseItem
 
 
@@ -46,4 +46,4 @@ def call_speech_model(
 def describe_model_error(exc: Exception) -> str:
     from ..http_client import describe_error
 
-    return describe_error(exc, config.AI_API_KEY)
+    return describe_error(exc, settings.ai_api_key)

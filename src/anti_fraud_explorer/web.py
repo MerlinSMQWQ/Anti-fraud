@@ -9,7 +9,7 @@ from flask import Flask, Response, abort, jsonify, render_template, request, sen
 
 from . import __version__
 from .agent import Agent, AgentResult, task_type_label
-from .config import DEBUG, HOST, PORT, TTS_CACHE_DIR
+from .config import settings
 from .conversation import store as conv_store
 from .dataset import get_knowledge_base, item_to_dict, normalize_text
 from .scenario_evidence import scenario_is_hard_match, scenario_match_score
@@ -239,7 +239,7 @@ def create_app() -> Flask:
     def tts_audio(filename: str):
         if not valid_tts_filename(filename):
             abort(404)
-        path = TTS_CACHE_DIR / filename
+        path = settings.tts_cache_dir / filename
         if not path.is_file():
             abort(404)
         return send_file(path, mimetype=_tts_mime_type(filename), conditional=True, max_age=3600)
@@ -295,9 +295,9 @@ def _tts_mime_type(filename: str) -> str:
 
 
 def _tts_extension() -> str:
-    from . import config as cfg
+    from .config import settings
 
-    return cfg.VOLC_TTS_ENCODING.lower()
+    return settings.volc_tts_encoding.lower()
 
 
 def _stream_items(
@@ -570,7 +570,7 @@ def _item_payload(item, include_content: bool = False) -> dict:
 
 
 def main() -> None:
-    create_app().run(host=HOST, port=PORT, debug=DEBUG)
+    create_app().run(host=settings.host, port=settings.port, debug=settings.debug)
 
 
 if __name__ == "__main__":

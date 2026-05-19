@@ -41,8 +41,8 @@ TASK_CONFIGS: dict[TaskType, TaskConfig] = {
         handler_name="_handle_recommend",
         generate_detail="正在按场景筛选、排序并写推荐理由",
     ),
-    TaskType.EXHIBITION_PLAN: TaskConfig(
-        task_type=TaskType.EXHIBITION_PLAN,
+    TaskType.LECTURE_PLAN: TaskConfig(
+        task_type=TaskType.LECTURE_PLAN,
         retrieval_limit=5,
         context_schema="exhibition_brief",
         handler_name="_handle_exhibition",
