@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .agent_models import TaskType
+from .agent.models import TaskType
 from .dataset import CaseItem, KnowledgeBase
 
 

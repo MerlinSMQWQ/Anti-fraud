@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from ..config import settings
-from ..agent_models import AgentDecision, TaskType, task_type_from_str
+from .models import AgentDecision, TaskType, task_type_from_str
 from ..dataset import KnowledgeBase, normalize_text
 
 

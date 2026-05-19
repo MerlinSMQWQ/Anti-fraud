@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .agent_models import AgentResult, TaskType
+from .agent.models import AgentResult, TaskType
 from .dataset import KnowledgeBase, get_ai_fields, normalize_text
 from .item_cards import _enriched_item_card, _source_payload, _title_with_family
 
