@@ -9,7 +9,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from anti_fraud_explorer.web import main  # noqa: E402
+from anti_fraud_explorer.web.web import main  # noqa: E402
 
 
 if __name__ == "__main__":

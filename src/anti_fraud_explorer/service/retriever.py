@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .agent.models import TaskType
-from .dataset import CaseItem, KnowledgeBase
+from ..agent.models import TaskType
+from ..domain.dataset import CaseItem, KnowledgeBase
 
 
 _PROVINCE_PATTERN = re.compile(

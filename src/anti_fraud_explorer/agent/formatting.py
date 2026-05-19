@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..dataset import normalize_text
+from ..domain.dataset import normalize_text
 from ..prompts import FRAUD_LABEL_MAP
 
 
@@ -117,15 +117,15 @@ def candidate_summaries_for_llm(items: list[Any], limit: int) -> str:
 
 # helpers from item_cards (keep them here to avoid circular import)
 def _title_with_family(item: Any) -> str:
-    from ..item_cards import _title_with_family as f
+    from ..service.item_cards import _title_with_family as f
     return f(item)
 
 
 def _enriched_item_card(item: Any) -> dict:
-    from ..item_cards import _enriched_item_card as f
+    from ..service.item_cards import _enriched_item_card as f
     return f(item)
 
 
 def _source_payload(item: Any) -> dict:
-    from ..item_cards import _source_payload as f
+    from ..service.item_cards import _source_payload as f
     return f(item)

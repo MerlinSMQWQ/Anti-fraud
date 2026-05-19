@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .dataset import item_to_dict
+from ..domain.dataset import item_to_dict
 
 
 def enriched_item_card(item: Any) -> dict[str, Any]:

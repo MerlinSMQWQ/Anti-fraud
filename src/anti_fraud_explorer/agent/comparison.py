@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .agent.models import AgentResult, TaskType
-from .dataset import KnowledgeBase, get_ai_fields, normalize_text
-from .item_cards import _enriched_item_card, _source_payload, _title_with_family
+from .models import AgentResult, TaskType
+from ..domain.dataset import KnowledgeBase, get_ai_fields, normalize_text
+from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
+from ..service.retriever import _PROVINCE_PATTERN, _SHORT_PROVINCE_MAP
 
 
 _COMPARISON_TARGET_TRAILING_RE = re.compile(
@@ -15,10 +16,9 @@ _COMPARISON_TARGET_TRAILING_RE = re.compile(
 )
 
 
-
 def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     """Handle a multi-entity structured comparison without fabricating matches."""
-    from .search import search_items
+    from ..service.search import search_items
 
     # Resolve target entities — try explicit entities first, fall back to splitting
     targets: list[str] = []
@@ -32,7 +32,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
 
     if len(targets) < 2:
         # Not enough entities to compare — fall through to LLM
-        from .ai import Answer, answer_question
+        from ..ai import Answer, answer_question
 
         answer: Answer = answer_question(
             kb,
@@ -143,7 +143,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     # City row
     lines.append(_row("城市", *(meta.city if meta and meta.city else "—" for _, _, meta, _ in resolved)))
 
-    # Display forms
+    # Entry channels
     lines.append(_row(
         "入口渠道",
         *("、".join(meta.entry_channels) if meta and meta.entry_channels else "\u2014" for _, _, meta, _ in resolved),
@@ -222,8 +222,6 @@ def _clean_comparison_target(value: str) -> str:
 
 
 def _comparison_target_parts(target: str) -> tuple[str, str]:
-    from .retriever import _PROVINCE_PATTERN, _SHORT_PROVINCE_MAP
-
     cleaned = _clean_comparison_target(target)
     province = ""
     match = _PROVINCE_PATTERN.search(cleaned)
@@ -248,7 +246,7 @@ def _comparison_target_parts(target: str) -> tuple[str, str]:
 
 
 def _resolve_comparison_target(kb: KnowledgeBase, target: str, used_item_ids: set[str]):
-    from .search import search_items
+    from ..service.search import search_items
 
     cleaned = _clean_comparison_target(target)
     province, core = _comparison_target_parts(cleaned)

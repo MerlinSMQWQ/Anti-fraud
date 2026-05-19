@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..dataset import KnowledgeBase
+from ..domain.dataset import KnowledgeBase
 from .models import AgentDecision
 from .planner import call_agent_planner_model
 

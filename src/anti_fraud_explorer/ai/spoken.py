@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
-from ..dataset import CaseItem, normalize_text
+from ..domain.dataset import CaseItem, normalize_text
 from ..prompts import get_emoji_re, SPOKEN_SYSTEM_PROMPT
 
 LOGGER = logging.getLogger(__name__)

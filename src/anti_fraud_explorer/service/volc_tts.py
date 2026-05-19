@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib import request
 
-from .config import settings
+from ..config import settings
 
 LOGGER = logging.getLogger(__name__)
 

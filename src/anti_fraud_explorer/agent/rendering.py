@@ -19,8 +19,8 @@ def render_template(name: str, **kwargs) -> str:
 
 def build_transform_local(transform_type: str, target_item) -> str:
     """Build a template-based local answer for content transformation."""
-    from ..item_cards import _title_with_family
-    from ..dataset import get_ai_fields
+    from ..service.item_cards import _title_with_family
+    from ..domain.dataset import get_ai_fields
 
     title = _title_with_family(target_item)
     category = target_item.category

@@ -7,7 +7,7 @@ from typing import Any
 
 from ..config import settings
 from .models import AgentDecision, TaskType, task_type_from_str
-from ..dataset import KnowledgeBase, normalize_text
+from ..domain.dataset import KnowledgeBase, normalize_text
 
 
 def call_agent_planner_model(
@@ -17,7 +17,7 @@ def call_agent_planner_model(
         raise RuntimeError('AI_AGENT_PLANNER is disabled')
     if not settings.ai_api_key:
         raise RuntimeError('AI_API_KEY is not configured')
-    from ..http_client import chat_completion
+    from ..service.http_client import chat_completion
 
     content = chat_completion(
         build_agent_planner_messages(query, kb, category, context),

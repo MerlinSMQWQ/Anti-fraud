@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..config import settings
-from ..dataset import CaseItem, KnowledgeBase, item_to_dict, normalize_text
-from ..search import normalize_search_query, search_items
+from ..domain.dataset import CaseItem, KnowledgeBase, item_to_dict, normalize_text
+from ..service.search import normalize_search_query, search_items
 
 
 LOGGER = logging.getLogger(__name__)

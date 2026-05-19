@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 from ..config import settings
-from ..dataset import CaseItem
+from ..domain.dataset import CaseItem
 from ..prompts import QA_SYSTEM_PROMPT
 from ..ai.context import build_context
 
@@ -15,7 +15,7 @@ def call_model_with_messages(
     max_tokens: int = 2000,
 ) -> str:
     """Send a chat completion via the unified http_client."""
-    from ..http_client import chat_completion
+    from ..service.http_client import chat_completion
 
     return chat_completion(messages, temperature, max_tokens)
 

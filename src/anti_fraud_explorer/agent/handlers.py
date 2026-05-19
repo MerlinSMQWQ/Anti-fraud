@@ -9,9 +9,9 @@ from typing import Any
 
 from ..config import settings
 from .models import TaskType, AgentResult
-from ..dataset import get_ai_fields, KnowledgeBase, normalize_text
-from ..item_cards import _enriched_item_card, _source_payload, _title_with_family
-from ..scenario_evidence import scenario_match_score, scenario_is_hard_match
+from ..domain.dataset import get_ai_fields, KnowledgeBase, normalize_text
+from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
+from ..service.scenario_evidence import scenario_match_score, scenario_is_hard_match
 from ..prompts import DEFAULT_TRANSFORM_TYPE, TRANSFORM_MAX_TOKENS, TRANSFORM_PROMPTS
 from .formatting import (
     candidate_summaries_for_llm,
@@ -25,13 +25,13 @@ Agent = Any  # Will be resolved at runtime from agent.py
 
 def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     """COMPARISON: multi-entity structured comparison, no LLM."""
-    from ..agent_comparison import handle_comparison as _comparison_impl
+    from .comparison import handle_comparison as _comparison_impl
     return _comparison_impl(kb, analysis)
 
 
 def handle_study_task(agent: Agent, analysis) -> AgentResult:
     """STUDY_TASK: curriculum/teaching plan generation."""
-    from ..search import search_items
+    from ..service.search import search_items
 
     target_item = None
     if analysis.entities:
@@ -124,7 +124,7 @@ def handle_study_task(agent: Agent, analysis) -> AgentResult:
 
 def handle_content_transform(agent: Agent, analysis) -> AgentResult:
     """CONTENT_TRANSFORM: translate / rewrite / creative brief."""
-    from ..search import search_items
+    from ..service.search import search_items
     from ..ai import Answer, answer_question
 
     target_item = None
@@ -229,7 +229,7 @@ def handle_content_transform(agent: Agent, analysis) -> AgentResult:
 
 def handle_browse(agent: Agent, analysis) -> AgentResult:
     """BROWSE_QUERY: structured filters + local listing, no LLM."""
-    from ..search import search_items
+    from ..service.search import search_items
 
     province = analysis.metadata_filters.get("province", "")
     level = analysis.metadata_filters.get("level", "")
@@ -284,8 +284,8 @@ def handle_browse(agent: Agent, analysis) -> AgentResult:
 
 def handle_recommend(agent: Agent, analysis) -> AgentResult:
     """RECOMMENDATION: LLM selects best items from candidate pool."""
-    from ..search import search_items
-    from ..http_client import chat_completion
+    from ..service.search import search_items
+    from ..service.http_client import chat_completion
 
     scenario = analysis.scenario
     audience = analysis.audience
@@ -542,7 +542,7 @@ def _select_exhibition_core_item(candidate_items, scene, audience, time_budget):
     if not settings.ai_api_key:
         return 0, f"先筛出 {len(candidate_items)} 个候选，再按当前排序取第 1 个核心案例。"
 
-    from ..http_client import chat_completion
+    from ..service.http_client import chat_completion
 
     candidate_lines = []
     for index, item in enumerate(candidate_items, 1):
@@ -603,7 +603,7 @@ def _select_exhibition_core_item(candidate_items, scene, audience, time_budget):
 
 
 def _call_transform_model(transform_type: str, context: str, query: str) -> str:
-    from ..http_client import chat_completion
+    from ..service.http_client import chat_completion
     system_prompt = TRANSFORM_PROMPTS.get(transform_type, TRANSFORM_PROMPTS[DEFAULT_TRANSFORM_TYPE])
     max_tokens = TRANSFORM_MAX_TOKENS.get(transform_type, TRANSFORM_MAX_TOKENS[DEFAULT_TRANSFORM_TYPE])
     return chat_completion(

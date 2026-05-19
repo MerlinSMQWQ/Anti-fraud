@@ -1,7 +1,7 @@
 """Smoke tests for dataset loading."""
 import pytest
 from anti_fraud_explorer.config import settings
-from anti_fraud_explorer.dataset import (
+from anti_fraud_explorer.domain.dataset import (
     load_dataset,
     get_knowledge_base,
     KnowledgeBase,

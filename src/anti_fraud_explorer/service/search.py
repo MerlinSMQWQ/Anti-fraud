@@ -7,8 +7,8 @@ import re
 from collections.abc import Iterable
 from functools import lru_cache
 
-from .config import settings
-from .dataset import CaseItem, KnowledgeBase, normalize_text
+from ..config import settings
+from ..domain.dataset import CaseItem, KnowledgeBase, normalize_text
 
 
 LOGGER = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def _build_pinyin_index(kb_hash: str) -> dict[str, list[str]]:
         from pypinyin import lazy_pinyin  # noqa: PLC0415 - optional dependency
         # We need kb inside the function but want the signature to accept
         # a cache key string.  Pull the singleton via dataset.
-        from .dataset import load_dataset
+        from ..domain.dataset import load_dataset
 
         kb = load_dataset()
         index: dict[str, list[str]] = {}

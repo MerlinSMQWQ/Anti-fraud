@@ -7,14 +7,14 @@ import re
 
 from flask import Flask, Response, abort, jsonify, render_template, request, send_file, stream_with_context
 
-from . import __version__
-from .agent import Agent, AgentResult, task_type_label
-from .config import settings
-from .conversation import store as conv_store
-from .dataset import get_knowledge_base, item_to_dict, normalize_text
-from .scenario_evidence import scenario_is_hard_match, scenario_match_score
-from .search import search_items
-from .volc_tts import (
+from .. import __version__
+from ..agent import Agent, AgentResult, task_type_label
+from ..config import settings
+from ..service.conversation import store as conv_store
+from ..domain.dataset import get_knowledge_base, item_to_dict, normalize_text
+from ..service.scenario_evidence import scenario_is_hard_match, scenario_match_score
+from ..service.search import search_items
+from ..service.volc_tts import (
     openai_tts_available,
     server_tts_available,
     server_tts_engine,
@@ -28,8 +28,8 @@ from .volc_tts import (
 def create_app() -> Flask:
     app = Flask(
         __name__,
-        template_folder="../../templates",
-        static_folder="../../static",
+        template_folder="../../../templates",
+        static_folder="../../../static",
     )
 
     app.logger.info(
@@ -295,7 +295,7 @@ def _tts_mime_type(filename: str) -> str:
 
 
 def _tts_extension() -> str:
-    from .config import settings
+    from ..config import settings
 
     return settings.volc_tts_encoding.lower()
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..dataset import CaseItem, normalize_text
+from ..domain.dataset import CaseItem, normalize_text
 
 
 def build_context(sources: list[CaseItem], max_chars: int) -> str:

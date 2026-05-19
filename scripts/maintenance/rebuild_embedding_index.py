@@ -18,8 +18,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from anti_fraud_explorer import config  # noqa: E402
-from anti_fraud_explorer.dataset import CaseItem, load_dataset  # noqa: E402
-from anti_fraud_explorer.embeddings import (  # noqa: E402
+from anti_fraud_explorer.domain.dataset import CaseItem, load_dataset  # noqa: E402
+from anti_fraud_explorer.service.embeddings import (  # noqa: E402
     EmbeddingClient,
     build_embedding_text,
     normalize_vector,

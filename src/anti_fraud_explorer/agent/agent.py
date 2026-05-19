@@ -2,46 +2,63 @@
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
 import re
 from dataclasses import replace
 from typing import Any
 
 from ..config import settings
+from ..domain.dataset import KnowledgeBase, get_ai_fields, normalize_text
+from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
+from ..service.search import (
+    LEXICAL_MIN_SCORE,
+    normalize_search_query,
+    rank_lexical,
+    search_items,
+    tokenize,
+)
+from ..service.retriever import _PROVINCE_PATTERN, _SHORT_PROVINCE_MAP
+from ..service.scenario_evidence import scenario_is_hard_match, scenario_match_score
+from ..prompts import SUBSEQUENT_TURN_SYSTEM_PROMPT, FRAUD_LABEL_MAP
+
 from .models import (
     AgentDecision,
     AgentResult,
     TaskType,
     task_type_from_str,
 )
-from ..dataset import KnowledgeBase, normalize_text
-from ..item_cards import _enriched_item_card, _source_payload, _title_with_family
-from ..prompts import FRAUD_LABEL_MAP
 from .router import IntentRouter
 from .formatting import (
+    context_title_keywords,
     format_context_item_for_llm,
     items_to_llm_context,
     items_to_title_context,
-    context_title_keywords,
 )
-from .rendering import render_template, build_transform_local
+from .rendering import render_template
 from .handlers import (
-    handle_comparison,
-    handle_study_task,
-    handle_content_transform,
     handle_browse,
-    handle_recommend,
+    handle_comparison,
+    handle_content_transform,
     handle_lecture,
+    handle_recommend,
+    handle_study_task,
 )
 
 LOGGER = logging.getLogger(__name__)
+
 MAX_SEARCH_ROUNDS_PER_TURN = 2
 INITIAL_TITLE_CANDIDATE_LIMIT = 100
 INITIAL_TITLE_CONTEXT_LIMIT = 100
 DETAIL_SEARCH_LIMIT_PER_QUERY = 8
-INITIAL_HIGH_RELEVANCE_MIN_SCORE = 35.0
-INITIAL_HIGH_RELEVANCE_TOP_RATIO = 0.55
+
+
+def _normalize_answer_text(value: Any) -> str:
+    """Clean line endings and whitespace while preserving Markdown line breaks."""
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").replace("\u00a0", " ")
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.split("\n")]
+    cleaned = "\n".join(lines).strip()
+    return re.sub(r"\n{3,}", "\n\n", cleaned)
 
 
 class Agent:
@@ -51,12 +68,14 @@ class Agent:
         self.kb = kb
         self.router = IntentRouter()
 
-    # -- first-turn RAG --------------------------------------------------
-    def _dispatch_first_turn(self, query, category, include_speech):
-        yield from self._dispatch_subsequent_turn(query, category, include_speech, context=None)
+    # ------------------------------------------------------------------ #
+    # Public API
+    # ------------------------------------------------------------------ #
 
-    # -- dispatch (subsequent turns) ------------------------------------
-    def dispatch(self, query, category="", include_speech=True, context=None):
+    def dispatch(
+        self, query: str, category: str = "",
+        include_speech: bool = True, context: dict | None = None,
+    ) -> AgentResult:
         result = None
         speech_text = ""
         for event in self.dispatch_stream(query, category, include_speech=include_speech, context=context):
@@ -68,7 +87,10 @@ class Agent:
             result = replace(result, speech=speech_text)
         return result
 
-    def dispatch_stream(self, query, category="", include_speech=True, context=None):
+    def dispatch_stream(
+        self, query: str, category: str = "",
+        include_speech: bool = True, context: dict | None = None,
+    ):
         query = query.strip()
         if not query:
             yield AgentResult(
@@ -82,24 +104,30 @@ class Agent:
         has_legacy_context = bool(context and (context.get("question") or context.get("items") or context.get("answer")))
         is_first = not context or (context.get("turn_count", 0) == 0 and not has_legacy_context)
         if is_first:
-            yield from self._dispatch_first_turn(query, category, include_speech)
+            yield from self._dispatch_subsequent_turn(query, category, include_speech, context=None)
             return
 
         yield from self._dispatch_subsequent_turn(query, category, include_speech, context)
 
-    def _dispatch_subsequent_turn(self, query, category, include_speech, context):
+    # ------------------------------------------------------------------ #
+    # Core dispatch loop
+    # ------------------------------------------------------------------ #
+
+    def _dispatch_subsequent_turn(
+        self, query: str, category: str, include_speech: bool, context: dict | None,
+    ):
         from ..ai import describe_model_error
 
         context = context or {}
         yield self._progress_event("search", "检索资料", "按原问题筛选候选标题。")
         title_candidates, initial_total_count, initial_note = self._search_initial_candidates(query, category, context)
         search_rounds_used = 1
-        used_queries = [query]
-        detailed_items = []
+        used_queries: list[str] = [query]
+        detailed_items: list[Any] = []
         collected_items = self._merge_items(title_candidates, detailed_items)
         total_count = initial_total_count
         retrieval_note = initial_note
-        warnings = []
+        warnings: list[str] = []
 
         if not settings.ai_api_key:
             yield self._progress_event("generate", "整理结论", "未配置模型 Key，使用本地案例资料直接回答。")
@@ -185,7 +213,625 @@ class Agent:
                 else f"服务器根据模型查询词没有查询到高相关结果：{'、'.join(search_queries)}。"
             )
 
-    # ... rest of the methods (same as before but now referencing new modules)
+    # ------------------------------------------------------------------ #
+    # Model call helpers
+    # ------------------------------------------------------------------ #
 
-    # I'll include the essential methods that were part of Agent, skipping some
-    # to keep this file focused. Full file would be long, but I'll provide key ones.
+    def _call_subsequent_turn_model(
+        self, query: str, context: dict, title_candidates: list[Any],
+        detailed_items: list[Any], search_rounds_used: int, retrieval_note: str = "",
+    ) -> dict[str, Any]:
+        from ..service.http_client import chat_completion
+        from .planner import agent_planner_extra_options, extract_json_object
+
+        raw = chat_completion(
+            self._build_subsequent_turn_messages(
+                query=query, context=context, title_candidates=title_candidates,
+                detailed_items=detailed_items, search_rounds_used=search_rounds_used,
+                retrieval_note=retrieval_note,
+            ),
+            temperature=0.2,
+            max_tokens=2200,
+            extra_options=agent_planner_extra_options(),
+        )
+        payload = json.loads(extract_json_object(raw))
+        if not isinstance(payload, dict):
+            raise ValueError("Subsequent-turn model did not return a JSON object")
+        return payload
+
+    def _build_subsequent_turn_messages(
+        self, query: str, context: dict, title_candidates: list[Any],
+        detailed_items: list[Any], search_rounds_used: int, retrieval_note: str = "",
+    ) -> list[dict[str, str]]:
+        remaining = max(MAX_SEARCH_ROUNDS_PER_TURN - search_rounds_used, 0)
+        history_text = self._format_history_for_llm(context)
+        title_text = (
+            items_to_title_context(title_candidates[:INITIAL_TITLE_CONTEXT_LIMIT], len(title_candidates))
+            if title_candidates else "无"
+        )
+        detail_text = (
+            items_to_llm_context(detailed_items[:30], len(detailed_items))
+            if detailed_items else "无"
+        )
+
+        user_prompt = (
+            f"搜索状态：已连续搜索 {search_rounds_used} 轮，剩余 {remaining} 轮。\n\n"
+            f"对话历史（最多最近五轮）：\n{history_text}\n\n"
+            f"检索说明：{retrieval_note or '服务器尚未提供额外检索说明。'}\n\n"
+            f"第1轮标题候选（仅含标题和基础元数据，不等同于完整事实依据）：\n{title_text}\n\n"
+            f"第2轮详情资料（模型查询后由服务器补充）：\n{detail_text}\n\n"
+            f"当前问题：{query}"
+        )
+        return [
+            {"role": "system", "content": SUBSEQUENT_TURN_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+
+    def _format_history_for_llm(self, context: dict) -> str:
+        history = context.get("history")
+        if not isinstance(history, list) or not history:
+            q = normalize_text(context.get("question") or "")
+            a = normalize_text(context.get("answer") or "")
+            items = context.get("items") or []
+            lines = []
+            if q:
+                lines.append(f"上一轮问：{q}")
+            if a:
+                lines.append(f"上一轮答：{a[:300]}")
+            if isinstance(items, list) and items:
+                title_text = "、".join(
+                    normalize_text(item.get("title") if isinstance(item, dict) else str(item))
+                    for item in items[:8]
+                )
+                if title_text:
+                    lines.append(f"上一轮涉及案例：{title_text}")
+            return "\n".join(lines) if lines else "无"
+
+        blocks: list[str] = []
+        for idx, turn in enumerate(history[-5:], 1):
+            if not isinstance(turn, dict):
+                continue
+            q = normalize_text(turn.get("q") or "")
+            a = normalize_text(turn.get("a") or "")
+            lines = [f"第{idx}轮"]
+            if q:
+                lines.append(f"问：{q}")
+            if a:
+                lines.append(f"答：{a[:300]}")
+
+            items_full = turn.get("items_full") or []
+            if isinstance(items_full, list) and items_full:
+                lines.append("涉及案例：")
+                for item in items_full[:8]:
+                    item_text = format_context_item_for_llm(item)
+                    if item_text:
+                        lines.append(item_text)
+            else:
+                titles = turn.get("items") or []
+                if isinstance(titles, list) and titles:
+                    title_text = "、".join(str(title) for title in titles[:8] if str(title).strip())
+                    if title_text:
+                        lines.append(f"涉及案例：{title_text}")
+            blocks.append("\n".join(lines))
+
+        return "\n\n".join(blocks) if blocks else "无"
+
+    # ------------------------------------------------------------------ #
+    # Search / merge / fallback helpers
+    # ------------------------------------------------------------------ #
+
+    def _search_initial_candidates(
+        self, query: str, category: str, context: dict | None = None,
+    ) -> tuple[list[Any], int, str]:
+        search_query = normalize_search_query(query)
+        lowered_query = search_query or normalize_text(query).lower()
+        context_items = self._context_items(context or {})
+        contextual_items = self._contextual_initial_candidates(context_items, category)
+        if not lowered_query:
+            if contextual_items:
+                return contextual_items, len(contextual_items), self._contextual_candidate_note(contextual_items)
+            return [], 0, "服务器根据原问题没有查询到候选标题；你可以直接回答或组织关键词重新查询。"
+
+        candidates = [
+            item for item in self.kb.items
+            if not category or item.category == category
+        ]
+        structured_items = self._structured_initial_candidates(query, limit=INITIAL_TITLE_CANDIDATE_LIMIT)
+        ranked = rank_lexical(candidates, lowered_query, tokenize(search_query))
+        scenario = self._query_scenario(query)
+        lexical_items = [
+            item for score, item in ranked
+            if score >= LEXICAL_MIN_SCORE
+            and (not scenario or scenario_is_hard_match(item, scenario))
+        ][:INITIAL_TITLE_CANDIDATE_LIMIT]
+
+        title_candidates = self._merge_items(
+            contextual_items,
+            self._merge_items(structured_items, lexical_items),
+        )[:INITIAL_TITLE_CANDIDATE_LIMIT]
+        if not title_candidates:
+            return [], 0, (
+                "服务器根据原问题没有查询到候选标题；"
+                "如果历史上下文不足，你可以发送 search_queries 重新组织关键词查询。"
+            )
+
+        note_prefix = (
+            "服务器已附带历史案例相关候选，是否采用由你根据对话判断；"
+            if contextual_items else ""
+        )
+        note = (
+            note_prefix +
+            f"服务器已完成第 1 轮标题候选检索，提供 {len(title_candidates)} 个候选案例的标题和基础元数据；"
+            "这些候选用于判断下一步，不包含完整事实依据。"
+        )
+        return title_candidates, len(title_candidates), note
+
+    def _contextual_initial_candidates(self, context_items: list[Any], category: str) -> list[Any]:
+        if not context_items:
+            return []
+        categories = {item.category for item in context_items if item.category}
+        if category:
+            categories.add(category)
+        title_keywords = context_title_keywords(context_items)
+        context_ids = {item.id for item in context_items}
+        forms = {form for item in context_items for form in item.entry_channels}
+        scenarios = {scenario for item in context_items for scenario in item.suitable_scenarios}
+
+        scored: list[tuple[int, str, Any]] = []
+        for item in self.kb.items:
+            score = 0
+            if item.id in context_ids:
+                score += 12
+            if categories and item.category in categories:
+                score += 6
+            if any(keyword and (keyword in item.title or keyword in item.family) for keyword in title_keywords):
+                score += 10
+            if forms and any(form in forms for form in item.entry_channels):
+                score += 2
+            if scenarios and any(scenario in scenarios for scenario in item.suitable_scenarios):
+                score += 1
+            if item.level == "极高":
+                score += 3
+            elif item.level == "高":
+                score += 2
+            if score <= 0:
+                continue
+            scored.append((score, item.title, item))
+        scored.sort(key=lambda row: (-row[0], row[1]))
+        return [item for _, _, item in scored[:INITIAL_TITLE_CANDIDATE_LIMIT]]
+
+    def _contextual_candidate_note(self, items: list[Any]) -> str:
+        return (
+            f"服务器根据历史案例附带 {len(items)} 个相关候选标题；"
+            "是否承接上一轮由你根据对话历史判断。如果需要新增案例详情，请在 search_queries 中给出案例标题。"
+        )
+
+    def _structured_initial_candidates(self, query: str, limit: int) -> list[Any]:
+        province = self._query_province(query)
+        scenario = self._query_scenario(query)
+        wants_recommendation = bool(re.search(r"推荐|适合|哪些|有哪些|找|筛选|展示|宣传|宣讲|班会|活动|互动|亲子", query))
+        if not wants_recommendation or not (province or scenario):
+            return []
+
+        scored: list[tuple[int, str, Any]] = []
+        for item in self.kb.items:
+            if province and item.province != province:
+                continue
+            score = 0
+            if scenario:
+                scenario_score = scenario_match_score(item, scenario)
+                if scenario_score < 4:
+                    continue
+                score += scenario_score
+            if province:
+                score += 8
+            if re.search(r"展示|宣传|宣讲|班会", query) and item.entry_channels:
+                score += 4
+            if re.search(r"活动|互动", query) and item.entry_channels:
+                score += 4
+            if item.level == "极高":
+                score += 4
+            elif item.level == "高":
+                score += 3
+            elif item.level == "中":
+                score += 1
+            if item.entry_channels:
+                score += min(len(item.entry_channels), 3)
+            if score <= 0:
+                continue
+            scored.append((score, item.title, item))
+
+        scored.sort(key=lambda row: (-row[0], row[1]))
+        return [item for _, _, item in scored[:limit]]
+
+    def _query_province(self, query: str) -> str:
+        for province in {item.province for item in self.kb.items if item.province}:
+            if province and province in query:
+                return province
+        for short, full in _SHORT_PROVINCE_MAP.items():
+            if short in query:
+                return full
+        return ""
+
+    def _query_scenario(self, query: str) -> str:
+        if "老年" in query or "老人" in query or "养老" in query:
+            return "老年防骗"
+        if "社区" in query or "居民" in query:
+            return "社区宣传"
+        if "校园" in query or "学校" in query or "学生" in query or "班会" in query or "课堂" in query:
+            return "校园宣讲"
+        if "企业" in query or "财务" in query or "老板" in query or "领导" in query:
+            return "企业培训"
+        if "短视频" in query or "海报" in query or "推文" in query or "口播" in query:
+            return "新媒体提醒"
+        if "案例" in query or "复盘" in query or "拆解" in query:
+            return "以案说法"
+        return ""
+
+    def _search_subsequent_items(self, queries: list[str], category: str) -> tuple[list[Any], int]:
+        items: list[Any] = []
+        seen: set[str] = set()
+        total = 0
+        for search_query in queries[:6]:
+            exact_items = self._exact_items_for_query(search_query, category)
+            if exact_items:
+                result = exact_items
+                result_total = len(exact_items)
+            else:
+                result, result_total = search_items(
+                    self.kb, query=search_query, category=category,
+                    limit=DETAIL_SEARCH_LIMIT_PER_QUERY,
+                )
+            total += result_total
+            for item in result:
+                if item.id in seen:
+                    continue
+                seen.add(item.id)
+                items.append(item)
+        return items, total
+
+    def _exact_items_for_query(self, query: str, category: str) -> list[Any]:
+        ref = normalize_text(query)
+        if not ref:
+            return []
+        matches: list[Any] = []
+        seen: set[str] = set()
+        for item in self.kb.items:
+            if category and item.category != category:
+                continue
+            if ref in (item.id, item.title, _title_with_family(item), item.family):
+                if item.id not in seen:
+                    seen.add(item.id)
+                    matches.append(item)
+        return matches
+
+    def _merge_items(self, existing: list[Any], incoming: list[Any]) -> list[Any]:
+        merged = list(existing)
+        seen = {item.id for item in merged if hasattr(item, "id")}
+        for item in incoming:
+            item_id = getattr(item, "id", "")
+            if not item_id or item_id in seen:
+                continue
+            seen.add(item_id)
+            merged.append(item)
+        return merged
+
+    # ------------------------------------------------------------------ #
+    # Answer / fallback result builders
+    # ------------------------------------------------------------------ #
+
+    def _subsequent_answer_result(
+        self, payload: dict[str, Any], answer: str, context: dict,
+        collected_items: list[Any], used_queries: list[str],
+        total_count: int, warnings: list[str],
+    ) -> tuple[AgentResult, AgentDecision]:
+        task_type = task_type_from_str(str(payload.get("task_type") or TaskType.FACT_QA.value))
+        confidence = clamp_float(payload.get("confidence"), default=0.78)
+        reason = normalize_text(payload.get("reason") or "模型根据最近五轮上下文完成回答。")
+        display_pool = self._merge_items(self._context_items(context), collected_items)
+        raw_display_items = payload.get("display_items")
+        if isinstance(raw_display_items, list):
+            display_refs = self._payload_str_list(raw_display_items)
+            display_items = self._select_display_items(display_refs, display_pool, fallback_items=[])
+        else:
+            display_items = self._select_display_items([], display_pool, fallback_items=collected_items)
+        cards = [_enriched_item_card(item) for item in display_items[:8]]
+        sources = [_source_payload(item) for item in display_items[:5]]
+
+        decision = AgentDecision(
+            task_type=task_type,
+            confidence=confidence,
+            needs_retrieval=bool(used_queries),
+            needs_llm=True,
+            reason=reason,
+            mode="llm_context",
+            warnings=list(warnings),
+            planner="llm_decision",
+            search_queries=list(used_queries),
+        )
+        result = AgentResult(
+            task_type=task_type,
+            answer=answer,
+            items=cards,
+            sources=sources,
+            mode="llm_context",
+            confidence=confidence,
+            warnings=list(warnings),
+            total_count=len(display_items),
+        )
+        return result, decision
+
+    def _select_display_items(self, refs: list[str], pool: list[Any], fallback_items: list[Any]) -> list[Any]:
+        selected: list[Any] = []
+        seen: set[str] = set()
+
+        def add(item: Any) -> None:
+            item_id = getattr(item, "id", "")
+            if item_id and item_id not in seen:
+                seen.add(item_id)
+                selected.append(item)
+
+        for ref in refs:
+            for item in pool:
+                if self._item_matches_ref(item, ref):
+                    add(item)
+                    break
+        if not selected:
+            for item in fallback_items[:8]:
+                add(item)
+        return selected
+
+    def _item_matches_ref(self, item: Any, ref: str) -> bool:
+        ref = normalize_text(ref)
+        if not ref:
+            return False
+        return ref in (item.id, item.title, _title_with_family(item), item.family)
+
+    def _subsequent_fallback_result(
+        self, query: str, context: dict, collected_items: list[Any],
+        used_queries: list[str], total_count: int, warnings: list[str],
+        reason: str = "后续轮模型未能给出可用 answer，服务器使用上下文兜底。",
+        mode: str = "llm_context_fallback", planner: str = "llm_decision",
+    ) -> tuple[AgentResult, AgentDecision]:
+        display_items = collected_items[:5] or self._context_items(context)[:5]
+        task_type = _fallback_task_type(query)
+        if display_items:
+            lead = (
+                "我先按本地案例库推荐几条："
+                if task_type is TaskType.RECOMMENDATION
+                else "我先基于当前已有资料回答："
+            )
+            lines = [lead]
+            for item in display_items[:3]:
+                loc = " · ".join(part for part in [item.province, item.city] if part)
+                meta = " | ".join(part for part in [item.category, item.level, loc] if part)
+                lines.append(f"- **{_title_with_family(item)}**：{meta}")
+                if item.summary:
+                    lines.append(f"  {item.summary[:140]}")
+            if used_queries:
+                lines.append(f"\n已尝试检索：{'、'.join(used_queries)}。")
+            answer = "\n".join(lines)
+        else:
+            answer = "这轮我没有拿到足够可靠的资料来回答。可以换成更具体的案例名、骗局类型或地区再问一次。"
+
+        decision = AgentDecision(
+            task_type=task_type,
+            confidence=0.4,
+            needs_retrieval=bool(used_queries),
+            needs_llm=False,
+            reason=reason,
+            mode=mode,
+            warnings=list(warnings),
+            planner=planner,
+            search_queries=list(used_queries),
+        )
+        result = AgentResult(
+            task_type=task_type,
+            answer=answer,
+            items=[_enriched_item_card(item) for item in display_items],
+            sources=[_source_payload(item) for item in display_items[:5]],
+            mode=mode,
+            confidence=0.4,
+            warnings=list(warnings),
+            total_count=len(display_items),
+        )
+        return result, decision
+
+    # ------------------------------------------------------------------ #
+    # Misc helpers
+    # ------------------------------------------------------------------ #
+
+    def _payload_action(self, payload: dict[str, Any]) -> str:
+        action = str(payload.get("action") or "").strip().lower()
+        if action in {"answer", "search"}:
+            return action
+        if self._payload_str_list(payload.get("search_queries")):
+            return "search"
+        return "answer"
+
+    def _payload_str_list(self, value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        result: list[str] = []
+        for item in value:
+            text = normalize_text(str(item))
+            if text and text not in result:
+                result.append(text)
+        return result
+
+    def _fallback_queries_from_context(self, context: dict) -> list[str]:
+        queries: list[str] = []
+        for item in self._context_item_payloads(context):
+            title = normalize_text(item.get("title") or "")
+            if title and title not in queries:
+                queries.append(title)
+            category = normalize_text(item.get("category") or "")
+            if category and category not in queries:
+                queries.append(category)
+            if len(queries) >= 4:
+                break
+        if queries:
+            return queries
+        for item in context.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            title = normalize_text(item.get("title") or "")
+            if title and title not in queries:
+                queries.append(title)
+            if len(queries) >= 4:
+                break
+        return queries
+
+    def _context_item_payloads(self, context: dict) -> list[dict]:
+        payloads: list[dict] = []
+        seen: set[str] = set()
+        for item in context.get("items_full") or []:
+            if isinstance(item, dict):
+                key = str(item.get("id") or item.get("title") or "").strip()
+                if key and key not in seen:
+                    seen.add(key)
+                    payloads.append(item)
+        history = context.get("history")
+        if isinstance(history, list):
+            for turn in history[-5:]:
+                if not isinstance(turn, dict):
+                    continue
+                for item in turn.get("items_full") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    key = str(item.get("id") or item.get("title") or "").strip()
+                    if key and key not in seen:
+                        seen.add(key)
+                        payloads.append(item)
+        return payloads
+
+    def _context_items(self, context: dict) -> list[Any]:
+        items: list[Any] = []
+        seen: set[str] = set()
+        for payload in self._context_item_payloads(context):
+            item = self._resolve_context_item(payload)
+            if item is None or item.id in seen:
+                continue
+            seen.add(item.id)
+            items.append(item)
+        return items
+
+    def _resolve_context_item(self, payload: dict) -> Any | None:
+        item_id = str(payload.get("id") or "").strip()
+        if item_id:
+            item = self.kb.get(item_id)
+            if item is not None:
+                return item
+        title = normalize_text(payload.get("title") or "")
+        if not title:
+            return None
+        for item in self.kb.items:
+            if item.title == title or _title_with_family(item) == title:
+                return item
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Speech (delegated to ai.spoken)
+    # ------------------------------------------------------------------ #
+
+    def _ensure_speech(self, result: AgentResult, query: str = "") -> AgentResult:
+        if result.speech:
+            return result
+        from ..ai.spoken import build_spoken_answer
+        speech = build_spoken_answer(
+            result.answer,
+            question=query,
+            sources=self._speech_source_items(result),
+        )
+        return replace(result, speech=speech)
+
+    def _speech_source_items(self, result: AgentResult) -> list[Any]:
+        source_items: list[Any] = []
+        seen: set[str] = set()
+        for payload in [*result.sources, *result.items]:
+            item_id = payload.get("id") if isinstance(payload, dict) else ""
+            if not item_id or item_id in seen:
+                continue
+            item = self.kb.get(item_id)
+            if item is None:
+                continue
+            seen.add(item_id)
+            source_items.append(item)
+        return source_items
+
+    def _stream_completed_result(
+        self, result: AgentResult, decision: AgentDecision,
+        include_speech: bool, query: str = "",
+    ):
+        from .planner import clamp_float
+
+        if not include_speech or result.speech:
+            yield with_agent_decision(result, decision, include_speech)
+            return
+        yield with_agent_decision(replace(result, speech=""), decision, include_speech)
+        if result.answer:
+            result = self._ensure_speech(result, query=query)
+            yield {"type": "speech", "text": result.speech}
+
+    def _progress_event(self, step: str, title: str, detail: str) -> dict[str, str]:
+        return {"type": "progress", "step": step, "title": title, "detail": detail}
+
+
+# ------------------------------------------------------------------ #
+# Module-level helpers
+# ------------------------------------------------------------------ #
+
+def _fallback_task_type(query: str) -> TaskType:
+    text = normalize_text(query)
+    if re.search(r"推荐|适合|筛选|找.*案例", text):
+        return TaskType.RECOMMENDATION
+    if re.search(r"比较|对比|区别|不同", text):
+        return TaskType.COMPARISON
+    if re.search(r"班会|课堂|任务单|教学|宣教任务", text):
+        return TaskType.STUDY_TASK
+    if re.search(r"策划|宣传角|宣传栏|方案|流程", text):
+        return TaskType.LECTURE_PLAN
+    if re.search(r"改写|改成|口播|文案|双语|翻译|海报|短视频|提醒稿", text):
+        return TaskType.CONTENT_TRANSFORM
+    return TaskType.FACT_QA
+
+
+def with_agent_decision(
+    result: AgentResult, decision: AgentDecision, include_speech: bool,
+) -> AgentResult:
+    result = replace(result, decision=decision.to_payload())
+    if not include_speech:
+        result = replace(result, speech="")
+    return result
+
+
+def normalize_query_with_pinyin_anchor(kb: KnowledgeBase, query: str, category: str = "") -> str:
+    query = normalize_text(query)
+    if not query:
+        return query
+    from ..service.search import search_items_pinyin
+    for item in search_items_pinyin(kb, query):
+        if category and item.category != category:
+            continue
+        corrected = replace_homophone_span(query, item.title)
+        if corrected != query:
+            return corrected
+    return query
+
+
+def replace_homophone_span(text: str, canonical: str) -> str:
+    if canonical in text:
+        return text
+    try:
+        from pypinyin import lazy_pinyin
+    except ImportError:
+        return text
+    canonical_py = "".join(lazy_pinyin(canonical))
+    if not canonical_py:
+        return text
+    for start in range(len(text)):
+        for end in range(start + 2, len(text) + 1):
+            span = text[start:end]
+            if "".join(lazy_pinyin(span)) == canonical_py:
+                return f"{text[:start]}{canonical}{text[end:]}"
+    return text

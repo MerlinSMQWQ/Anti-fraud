@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .dataset import normalize_text
+from ..domain.dataset import normalize_text
 
 
 SOFT_SCENARIO_SCORE = 2
