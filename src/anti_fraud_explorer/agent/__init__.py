@@ -435,8 +435,8 @@ class Agent:
             "| **名称：**规范中文名。 | **Name:** English name. |\n"
             "| **案例定位：**中文类别、地区或风险等级说明。 | **Positioning:** Matching English sentence. |\n"
             "| **简介：**2-3 句中文介绍诈骗入口、手法和核心风险。 | **Introduction:** 2-3 matching English sentences. |\n"
-            "| **主要特色：**2-3 句中文概括技艺、题材、审美或展示价值。 | **Key Features:** 2-3 matching English sentences. |\n"
-            "| **传播文案：**1-2 句中文展示文案。 | **Promotional Copy:** 1-2 matching English sentences. |\n"
+            "| **风险信号：**2-3 句中文概括关键诈骗手法、诱导话术或识别要点。 | **Risk Signals:** 2-3 matching English sentences. |\n"
+            "| **提醒文案：**1-2 句中文防范提醒。 | **Reminder:** 1-2 matching English sentences. |\n"
             "表格后不加结论文字。双语表格使用“中文 / English”两列，并让每一行成为一组中英对应段落。"
             "所有表格行都独占一行，中文段落和英文段落在同一行左右对应。\n"
             "输出前自检：recommendation 使用 `## 场景推荐` 和 `### 编号. 案例名` 分段；comparison 和 bilingual 表格使用真实换行；编号列表中 `1.`、`2.` 分别独占一行。\n"
@@ -1301,11 +1301,11 @@ class Agent:
         if target_item.level:
             context_lines.append(f"级别：{target_item.level}")
         if ai["features"]:
-            context_lines.append(f"主要特色：{ai['features']}")
+            context_lines.append(f"关键手法：{ai['features']}")
         if ai["history"]:
-            context_lines.append(f"历史背景：{ai['history']}")
+            context_lines.append(f"来源：{ai['history']}")
         if ai["cultural_value"]:
-            context_lines.append(f"重要价值：{ai['cultural_value']}")
+            context_lines.append(f"防范建议：{ai['cultural_value']}")
         context_lines.append(f"简介：{target_item.summary}")
         context_lines.append(f"正文片段：{target_item.content[:800]}")
         context = "\n".join(context_lines)
@@ -1982,7 +1982,7 @@ def _items_to_title_context(items, total: int) -> str:
 
 def _context_title_keywords(items: list[Any]) -> list[str]:
     keywords: list[str] = []
-    suffixes = ("绣", "剪纸", "年画", "皮影", "泥塑", "木雕", "石雕", "瓷", "陶", "茶", "酒", "医药", "戏", "曲")
+    suffixes = ("诈骗", "刷单", "返利", "冒充", "贷款", "游戏", "理财", "养老", "客服", "公检法", "征信", "虚假", "投资")
     for item in items:
         texts = [getattr(item, "family", ""), getattr(item, "title", "")]
         for text in texts:

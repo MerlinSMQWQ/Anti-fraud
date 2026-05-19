@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import re
 
-from ..dataset import HeritageItem, normalize_text
+from ..dataset import CaseItem, normalize_text
 from ..ai.prompts import get_structured_labels
 
 
-def build_context(sources: list[HeritageItem], max_chars: int) -> str:
+def build_context(sources: list[CaseItem], max_chars: int) -> str:
     chunks = []
     remaining = max_chars
     for index, item in enumerate(sources, start=1):
@@ -23,9 +23,9 @@ def build_context(sources: list[HeritageItem], max_chars: int) -> str:
     return "\n\n".join(chunks)
 
 
-def item_context_text(item: HeritageItem) -> str:
+def item_context_text(item: CaseItem) -> str:
     parts = []
-    for label in ("介绍", "历史", "主要特色", "重要价值", "内容"):
+    for label in ("场景简述", "关键手法", "风险信号", "防范建议", "内容"):
         value = extract_structured_field(item.content, label)
         if value:
             parts.append(f"{label}：{clean_knowledge_text(value)}")

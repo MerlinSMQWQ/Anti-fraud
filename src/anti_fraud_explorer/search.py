@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from . import config
-from .dataset import HeritageItem, KnowledgeBase, normalize_text
+from .dataset import CaseItem, KnowledgeBase, normalize_text
 
 
 LOGGER = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ def _build_pinyin_index(kb_hash: str) -> dict[str, list[str]]:
 def search_items_pinyin(
     kb: KnowledgeBase,
     query: str,
-) -> list[HeritageItem]:
+) -> list[CaseItem]:
     """Try pinyin-based homophone matching as a fallback.
 
     Converts the query characters to pinyin and looks for items whose
@@ -126,7 +126,7 @@ def search_items_pinyin(
 
     # Deduplicate and resolve
     seen: set[str] = set()
-    result: list[HeritageItem] = []
+    result: list[CaseItem] = []
     for item_id in matched_ids:
         if item_id in seen:
             continue
@@ -181,14 +181,14 @@ def search_items(
     keywords: str = "",
     limit: int = 30,
     offset: int = 0,
-) -> tuple[list[HeritageItem], int]:
+) -> tuple[list[CaseItem], int]:
     query = normalize_text(query)
     category = normalize_text(category)
     province = normalize_text(province)
     level = normalize_text(level)
     district = normalize_text(district)
     keywords = normalize_text(keywords)
-    candidates: Iterable[HeritageItem] = kb.items
+    candidates: Iterable[CaseItem] = kb.items
 
     if category:
         candidates = (item for item in candidates if item.category == category)
@@ -237,10 +237,10 @@ def search_items(
 
 def prepend_pinyin_matches(
     kb: KnowledgeBase,
-    ranked_items: list[HeritageItem],
+    ranked_items: list[CaseItem],
     query: str,
-    candidates: list[HeritageItem],
-) -> list[HeritageItem]:
+    candidates: list[CaseItem],
+) -> list[CaseItem]:
     """Place homophone title matches before normal ranked results.
 
     Pinyin matching is intentionally a lexical supplement: it helps misspelled
@@ -266,12 +266,12 @@ def prepend_pinyin_matches(
     return pinyin_results + [item for item in ranked_items if item.id not in pinyin_ids]
 
 
-def has_title_substring_match(items: list[HeritageItem], query: str) -> bool:
+def has_title_substring_match(items: list[CaseItem], query: str) -> bool:
     lowered_query = query.lower()
     return any(item.title and item.title.lower() in lowered_query for item in items)
 
 
-def has_location_token_match(items: list[HeritageItem], query: str) -> bool:
+def has_location_token_match(items: list[CaseItem], query: str) -> bool:
     tokens = [token for token in tokenize(query) if len(token) >= 2]
     if not tokens:
         return False
@@ -283,11 +283,11 @@ def has_location_token_match(items: list[HeritageItem], query: str) -> bool:
 
 
 def rank_lexical(
-    candidates: Iterable[HeritageItem],
+    candidates: Iterable[CaseItem],
     lowered_query: str,
     tokens: list[str],
-) -> list[tuple[float, HeritageItem]]:
-    ranked: list[tuple[float, HeritageItem]] = []
+) -> list[tuple[float, CaseItem]]:
+    ranked: list[tuple[float, CaseItem]] = []
 
     for item in candidates:
         score = score_item(item, lowered_query, tokens)
@@ -300,10 +300,10 @@ def rank_lexical(
 
 def rank_hybrid(
     kb: KnowledgeBase,
-    candidates: list[HeritageItem],
+    candidates: list[CaseItem],
     lowered_query: str,
     tokens: list[str],
-) -> list[tuple[float, HeritageItem]]:
+) -> list[tuple[float, CaseItem]]:
     from .embeddings import embedding_scores
 
     semantic_scores = embedding_scores(kb, lowered_query, candidates, min_score=0.0)
@@ -337,7 +337,7 @@ def rank_hybrid(
         if strong_match_bonus(item, lowered_query, tokens) > 0:
             candidate_ids.add(item.id)
 
-    ranked: list[tuple[float, HeritageItem]] = []
+    ranked: list[tuple[float, CaseItem]] = []
     for item_id in candidate_ids:
         item = items_by_id[item_id]
         score = rank_scores.get(item_id, 0.0)
@@ -351,14 +351,14 @@ def rank_hybrid(
 
 def add_rank_signal(
     rank_scores: dict[str, float],
-    ranked: list[tuple[float, HeritageItem]],
+    ranked: list[tuple[float, CaseItem]],
     weight: float,
 ) -> None:
     for rank, (_, item) in enumerate(ranked, start=1):
         rank_scores[item.id] = rank_scores.get(item.id, 0.0) + weight / (RRF_K + rank)
 
 
-def strong_match_bonus(item: HeritageItem, query: str, tokens: list[str]) -> float:
+def strong_match_bonus(item: CaseItem, query: str, tokens: list[str]) -> float:
     if not query:
         return 0.0
 
@@ -407,7 +407,7 @@ def lexical_tiebreak(score: float) -> float:
     return min(score, 100.0) / 10000.0
 
 
-def score_item(item: HeritageItem, query: str, tokens: list[str]) -> float:
+def score_item(item: CaseItem, query: str, tokens: list[str]) -> float:
     title = item.title.lower()
     family = item.family.lower()
     category = item.category.lower()

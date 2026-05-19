@@ -16,7 +16,7 @@ from typing import Any
 import httpx
 
 from . import config
-from .dataset import HeritageItem, KnowledgeBase, normalize_text
+from .dataset import CaseItem, KnowledgeBase, normalize_text
 
 
 class EmbeddingUnavailable(RuntimeError):
@@ -108,7 +108,7 @@ class EmbeddingClient:
             raise EmbeddingUnavailable(describe_error(exc, self.api_key)) from exc
 
 
-def build_embedding_text(item: HeritageItem, max_chars: int | None = None) -> str:
+def build_embedding_text(item: CaseItem, max_chars: int | None = None) -> str:
     max_chars = config.EMBEDDING_TEXT_MAX_CHARS if max_chars is None else max_chars
     parts = [
         f"名称：{item.title}",
@@ -182,7 +182,7 @@ def load_embedding_index(path: Path | None = None) -> EmbeddingIndex | None:
 def embedding_scores(
     kb: KnowledgeBase,
     query: str,
-    candidates: Iterable[HeritageItem],
+    candidates: Iterable[CaseItem],
     client: EmbeddingClient | None = None,
     min_score: float | None = None,
 ) -> dict[str, float]:

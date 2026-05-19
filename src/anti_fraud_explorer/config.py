@@ -1,32 +1,14 @@
 """Application paths and environment-backed settings."""
 
 from __future__ import annotations
-
-import os
 from pathlib import Path
+from dotenv import load_dotenv
+import os
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-
-def load_dotenv(path: Path | None = None) -> None:
-    if path is None:
-        path = PROJECT_ROOT / ".env"
-    if not path.exists():
-        return
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip("'\"")
-        if key and key not in os.environ:
-            os.environ[key] = value
-
-
-load_dotenv()
-
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
 
 def env_path(name: str, default: str) -> Path:
     value = os.getenv(name, default)

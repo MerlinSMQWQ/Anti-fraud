@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .. import config
-from ..dataset import HeritageItem, KnowledgeBase, item_to_dict, normalize_text
+from ..dataset import CaseItem, KnowledgeBase, item_to_dict, normalize_text
 from ..search import normalize_search_query, search_items
 
 
@@ -79,7 +79,7 @@ def fact_question_sources(
     question: str,
     category: str = "",
     limit: int = 5,
-) -> list[HeritageItem]:
+) -> list[CaseItem]:
     """Choose grounded sources for factual answers.
 
     Direct item questions like "汴绣是什么" should stay anchored to 汴绣 rather
@@ -98,16 +98,16 @@ def direct_item_matches(
     kb: KnowledgeBase,
     search_query: str,
     category: str = "",
-) -> list[HeritageItem]:
+) -> list[CaseItem]:
     search_query = normalize_text(search_query)
     category = normalize_text(category)
     if len(search_query) < 2:
         return []
 
-    exact_title: list[HeritageItem] = []
-    exact_family: list[HeritageItem] = []
-    title_contains: list[HeritageItem] = []
-    family_contains: list[HeritageItem] = []
+    exact_title: list[CaseItem] = []
+    exact_family: list[CaseItem] = []
+    title_contains: list[CaseItem] = []
+    family_contains: list[CaseItem] = []
     for item in kb.items:
         if category and item.category != category:
             continue
@@ -126,9 +126,9 @@ def direct_item_matches(
     return _dedupe_items(exact_title) or _dedupe_items(title_contains + exact_family + family_contains)
 
 
-def _dedupe_items(items: list[HeritageItem]) -> list[HeritageItem]:
+def _dedupe_items(items: list[CaseItem]) -> list[CaseItem]:
     seen: set[str] = set()
-    result: list[HeritageItem] = []
+    result: list[CaseItem] = []
     for item in items:
         key = "|".join(
             normalize_text(part)
@@ -147,7 +147,7 @@ def _dedupe_items(items: list[HeritageItem]) -> list[HeritageItem]:
     return result
 
 
-def build_local_answer(question: str, sources: list[HeritageItem]) -> str:
+def build_local_answer(question: str, sources: list[CaseItem]) -> str:
     from ..ai.context import item_context_text
 
     lead = f"根据数据集中与“{question}”最相关的资料，可以先这样理解："
@@ -161,7 +161,7 @@ def build_local_answer(question: str, sources: list[HeritageItem]) -> str:
 
 def summarize_snippet(text: str, max_chars: int = 180) -> str:
     text = normalize_text(text)
-    text = re.sub(r"^(介绍|历史|主要特色|重要价值|内容)[:：]\s*", "", text)
+    text = re.sub(r"^(案例标题|场景简述|关键手法|风险信号|防范建议)[:：]\\s*", "", text)
     if not text:
         return "暂无摘要。"
     sentences = [part.strip() for part in text.replace("；", "。").split("。") if part.strip()]
@@ -170,7 +170,7 @@ def summarize_snippet(text: str, max_chars: int = 180) -> str:
     return snippet.rstrip("。") + "。"
 
 
-def source_payload(item: HeritageItem) -> dict[str, Any]:
+def source_payload(item: CaseItem) -> dict[str, Any]:
     data = item_to_dict(item)
     data["excerpt"] = summarize_snippet(item.content, max_chars=120)
     return data

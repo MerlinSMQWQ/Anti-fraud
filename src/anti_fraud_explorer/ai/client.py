@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 from .. import config
-from ..dataset import HeritageItem
+from ..dataset import CaseItem
 
 
 def call_model_with_messages(
@@ -18,7 +18,7 @@ def call_model_with_messages(
     return chat_completion(messages, temperature, max_tokens)
 
 
-def call_chat_model(question: str, sources: list[HeritageItem]) -> str:
+def call_chat_model(question: str, sources: list[CaseItem]) -> str:
     from ..ai.speech import build_messages
 
     return call_model_with_messages(
@@ -31,7 +31,7 @@ def call_chat_model(question: str, sources: list[HeritageItem]) -> str:
 def call_speech_model(
     answer: str,
     question: str = "",
-    sources: list[HeritageItem] | None = None,
+    sources: list[CaseItem] | None = None,
     max_chars: int = 1800,
 ) -> str:
     from ..ai.speech import build_speech_messages

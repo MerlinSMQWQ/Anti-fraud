@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 
 from .agent_models import TaskType
-from .dataset import HeritageItem, KnowledgeBase
+from .dataset import CaseItem, KnowledgeBase
 
 
 _PROVINCE_PATTERN = re.compile(
@@ -74,18 +74,14 @@ _SHORT_PROVINCE_MAP: dict[str, str] = {
 }
 
 _CONSTRAINT_KEYWORDS: dict[str, str] = {
-    "展示难度低": "展示难度低",
-    "容易展示": "展示难度低",
+    "风险等级高": "风险等级高",
     "适合短时间": "适合短时间",
     "短时间": "适合短时间",
     "互动性强": "互动性强",
     "互动": "互动性强",
-    "趣味性": "趣味性强",
-    "适合户外": "适合户外",
-    "户外": "适合户外",
-    "成本低": "成本低",
-    "低成本": "成本低",
-    "便于运输": "便于运输",
+    "适合宣讲": "适合宣讲",
+    "适合讲座": "适合宣讲",
+    "适合班会": "适合班会",
 }
 
 _TIME_BUDGET_PATTERN = re.compile(
@@ -176,7 +172,7 @@ class QueryAnalysis:
     # ── scenario attributes ──
     scenario: str = ""  # 校园宣讲 / 社区宣传 / 老年防骗 / 企业培训 / 新媒体提醒
     audience: str = ""  # 中小学生 / 大学生 / 社区居民 / 老年人 / 企业员工
-    constraints: list[str] = field(default_factory=list)  # ["展示难度低", "适合短时间"]
+    constraints: list[str] = field(default_factory=list)  # ["风险等级高", "适合短时间"]
     time_budget: str = ""  # "30分钟" / "半天"
     tone: str = ""  # 正式 / 年轻化 / 展板风 / 讲解风
 
@@ -195,7 +191,7 @@ class QueryAnalysis:
 
 @dataclass
 class ScoredItem:
-    item: HeritageItem
+    item: CaseItem
     lexical_score: float = 0.0
     semantic_score: float = 0.0
     final_score: float = 0.0
@@ -372,7 +368,7 @@ class QueryAnalyzer:
     # ── extraction methods ──
 
     def _extract_entities(self, query: str) -> list[str]:
-        """Link query substrings to HeritageItem titles and families."""
+        """Link query substrings to CaseItem titles and families."""
         if not query:
             return []
         title_matches: list[str] = []

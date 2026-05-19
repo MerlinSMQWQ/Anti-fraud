@@ -6,7 +6,7 @@ import logging
 import re
 
 from .. import config
-from ..dataset import HeritageItem, normalize_text
+from ..dataset import CaseItem, normalize_text
 from ..ai.context import build_context, extract_structured_field, clean_knowledge_text
 from ..ai.prompts import get_emoji_re, qa_system_prompt, speech_system_prompt
 
@@ -14,7 +14,7 @@ from ..ai.prompts import get_emoji_re, qa_system_prompt, speech_system_prompt
 LOGGER = logging.getLogger(__name__)
 
 
-def build_messages(question: str, sources: list[HeritageItem]) -> list[dict[str, str]]:
+def build_messages(question: str, sources: list[CaseItem]) -> list[dict[str, str]]:
     context = build_context(sources, config.AI_MAX_CONTEXT_CHARS)
     return [
         {
@@ -31,7 +31,7 @@ def build_messages(question: str, sources: list[HeritageItem]) -> list[dict[str,
 def build_speech_messages(
     answer: str,
     question: str = "",
-    sources: list[HeritageItem] | None = None,
+    sources: list[CaseItem] | None = None,
     max_chars: int = 1800,
 ) -> list[dict[str, str]]:
     source_titles = "、".join(item.title for item in (sources or [])[:3]) or "无"
@@ -56,7 +56,7 @@ def build_speech_messages(
 def build_spoken_answer(
     answer: str,
     question: str = "",
-    sources: list[HeritageItem] | None = None,
+    sources: list[CaseItem] | None = None,
     prefer_model: bool = True,
     max_chars: int = 1800,
 ) -> str:
@@ -80,7 +80,7 @@ def build_spoken_answer(
 def build_speech_text(
     answer: str,
     question: str = "",
-    sources: list[HeritageItem] | None = None,
+    sources: list[CaseItem] | None = None,
     max_chars: int = 1800,
 ) -> str:
     spoken = build_answer_speech(answer, max_chars=max_chars)
@@ -174,16 +174,13 @@ def speech_section_heading(line: str) -> str:
     text = re.sub(r"^\s*[-*+]\s+", "", text).strip()
     text = text.strip(" ：:。；;")
     headings = {
-        "历史",
-        "历史渊源",
-        "历史渊源与发展",
-        "起源与发展",
-        "技艺特点",
-        "主要特色",
-        "代表作品",
-        "提醒价值",
-        "文化价值",
+        "场景简述",
+        "诈骗手法",
+        "关键手法",
+        "风险信号",
+        "风险等级",
         "防范建议",
+        "受害群体",
     }
     return text if text in headings else ""
 
@@ -202,32 +199,19 @@ def speech_line(line: str, section: str = "") -> str:
     if is_admin_sentence(line):
         return ""
 
-    label_match = re.match(r"^([^：:]{2,12})[：:]\s*(.+)$", line)
+    label_match = re.match(r"^([^：:]{2,12})[：:]\\s*(.+)$", line)
     if label_match:
         label = label_match.group(1).strip()
         body = clean_speech_body(label_match.group(2).strip())
-        if label == "代表作品":
-            body = clean_representative_body(body)
         transitions = {
-            "历史": "从历史来看，{body}",
-            "历史渊源": "从历史来看，{body}",
-            "历史渊源与发展": "从历史来看，{body}",
-            "起源与发展": "从起源看，{body}",
-            "技艺特点": "在技艺特点上，{body}",
-            "主要特色": "在技艺特点上，{body}",
-            "代表作品": "代表作品包括{body}",
-            "提醒价值": "从提醒价值看，{body}",
-            "文化价值": "文化价值在于，{body}",
-            "价值": "价值在于，{body}",
+            "场景简述": "案情是这样的，{body}",
+            "诈骗手法": "在诈骗手法上，{body}",
+            "关键手法": "在关键手法上，{body}",
+            "风险信号": "从风险信号看，{body}",
+            "风险等级": "风险等级属于{body}",
             "防范建议": "在防范建议上，{body}",
+            "受害群体": "受害群体主要是{body}",
             "类别": "它属于{body}",
-            "制作工艺": "制作工艺上，{body}",
-            "表演形式": "表演形式上，{body}",
-            "音乐特色": "音乐特色上，{body}",
-            "表演特点": "表演特点上，{body}",
-            "艺术价值": "艺术价值在于，{body}",
-            "历史价值": "历史价值在于，{body}",
-            "社会价值": "社会价值在于，{body}",
         }
         template = transitions.get(label)
         if template:
@@ -246,24 +230,17 @@ def speech_line(line: str, section: str = "") -> str:
 
 def apply_section_intro(section: str, line: str) -> str:
     intros = {
-        "历史": "从历史来看",
-        "历史渊源": "从历史来看",
-        "历史渊源与发展": "从历史来看",
-        "起源与发展": "从起源看",
-        "技艺特点": "在技艺特点上",
-        "主要特色": "在技艺特点上",
-        "代表作品": "代表作品包括",
-        "提醒价值": "从提醒价值看",
-        "文化价值": "从文化价值看",
+        "场景简述": "案情是这样的",
+        "诈骗手法": "在诈骗手法上",
+        "关键手法": "在关键手法上",
+        "风险信号": "从风险信号看",
+        "风险等级": "风险等级属于",
         "防范建议": "在防范建议上",
+        "受害群体": "受害群体主要是",
     }
     intro = intros.get(section)
     if not intro or line.startswith(intro):
         return line
-    if section == "代表作品":
-        line = re.sub(r"(.+?)剧目包括", r"\1有", line)
-        line = re.sub(r"(.+?)代表剧目有", r"\1有", line)
-        return f"代表作品方面，{line}"
     return f"{intro}，{line}"
 
 
@@ -290,7 +267,7 @@ def clean_representative_body(text: str) -> str:
 
 def build_source_speech(
     question: str,
-    sources: list[HeritageItem],
+    sources: list[CaseItem],
     max_chars: int = 760,
 ) -> str:
     if not sources:
@@ -298,13 +275,13 @@ def build_source_speech(
 
     item = sources[0]
     title = item.title
-    intro = extract_structured_field(item.content, "介绍") or item.summary
-    history = extract_structured_field(item.content, "历史")
-    feature = extract_structured_field(item.content, "主要特色")
-    value = extract_structured_field(item.content, "重要价值")
-    level = extract_structured_field(item.content, "归属")
-    city = extract_structured_field(item.content, "城市")
-    district = extract_structured_field(item.content, "地区")
+    intro = item.summary
+    feature = extract_structured_field(item.content, "关键手法")
+    risk_signal = extract_structured_field(item.content, "风险信号")
+    value = extract_structured_field(item.content, "防范建议")
+    level = item.level
+    city = item.city
+    district = item.district
 
     location = city
     if district and district != city:
@@ -326,13 +303,13 @@ def build_source_speech(
     if intro_text:
         sentences.append(intro_text)
 
-    feature_text = spoken_sentences(feature or history, max_chars=190, count=2)
+    feature_text = spoken_sentences(feature or risk_signal, max_chars=190, count=2)
     if feature_text and feature_text not in intro_text:
-        sentences.append(f"它最突出的特点是，{feature_text}")
+        sentences.append(f"关键风险信号是，{feature_text}")
 
     value_text = spoken_sentences(value, max_chars=150, count=1)
     if value_text:
-        sentences.append(f"它的价值在于，{value_text}")
+        sentences.append(f"防范建议是，{value_text}")
 
     speech = normalize_text("".join(sentences))
     speech = re.sub(r"[，、；：]\s*([。！？])", r"\1", speech)

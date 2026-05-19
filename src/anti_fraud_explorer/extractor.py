@@ -6,33 +6,31 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .dataset import HeritageItem
+from .dataset import CaseItem
 
 _FIELD_NAMES = (
-    "序号",
-    "标题",
-    "归属",
-    "类别",
+    "案例标题",
+    "场景简述",
+    "性质判断",
+    "判断理由",
+    "入口渠道",
+    "冒充身份",
+    "虚假认知",
+    "关键手法",
+    "目标资产",
+    "诈骗阶段",
+    "风险信号",
+    "风险等级",
+    "受害群体",
+    "是否造成损失",
+    "损失类型",
+    "防范建议",
+    "来源名称",
+    "涉及平台",
     "城市",
     "地区",
-    "报道地区",
-    "介绍",
-    "重大地区",
-    "主要特色",
-    "重要价值",
-    "企业",
-    "展示形式",
-    "联系",
-    "电话",
     "省份",
-    "地点",
-    "面积",
-    "operation",
-    "经纬度",
-    "历史",
-    "主要时间",
-    "内容",
-    "保护单位",
+    "标签",
 )
 _FIELD_STOP_PATTERN = "|".join(re.escape(name) for name in _FIELD_NAMES)
 _PROVINCE_PATTERN = re.compile(
@@ -43,28 +41,6 @@ _PROVINCE_PATTERN = re.compile(
     r"[一-鿿]{2,7}省"
     r")"
 )
-_HENAN_CITIES = {
-    "郑州市",
-    "开封市",
-    "洛阳市",
-    "平顶山市",
-    "安阳市",
-    "鹤壁市",
-    "新乡市",
-    "焦作市",
-    "濮阳市",
-    "许昌市",
-    "漯河市",
-    "三门峡市",
-    "南阳市",
-    "商丘市",
-    "信阳市",
-    "周口市",
-    "驻马店市",
-    "济源市",
-}
-
-
 @dataclass(frozen=True)
 class FieldEvidence:
     """Provenance metadata for a single extracted field."""
@@ -137,13 +113,14 @@ class SoftLabels:
 class RuleExtractor:
     """Extract deterministic metadata fields with regex rules."""
 
-    def extract(self, item: HeritageItem) -> StructuredMeta:
+    def extract(self, item: CaseItem) -> StructuredMeta:
         fields = _extract_all_fields(item.content)
-        raw_province = _province_from_region(_first_value(fields, "报道地区")) or _first_value(
+        raw_province = _province_from_region(_first_value(fields, "场景简述")) or _first_value(
             fields, "省份"
         )
         city_val = _first_value(fields, "城市")
-        province, province_method = _normalize_province(raw_province, city_val)
+        province = raw_province
+        province_method = "rule"
 
         evidence: dict[str, dict[str, Any]] = {}
 
@@ -164,16 +141,15 @@ class RuleExtractor:
         )
 
         district_val = _first_value(fields, "地区")
-        # district evidence stored as part of city group – skip standalone to keep lean
 
-        features_val = _first_value(fields, "主要特色")
+        features_val = _first_value(fields, "关键手法")
         evidence["features"] = _evidence_dict(
             source_text=features_val,
             method="rule",
             confidence=0.8 if features_val else 0.0,
         )
 
-        cv_val = _first_value(fields, "重要价值")
+        cv_val = _first_value(fields, "防范建议")
         evidence["cultural_value"] = _evidence_dict(
             source_text=cv_val,
             method="rule",
@@ -187,20 +163,20 @@ class RuleExtractor:
             district=district_val,
             inheritors=(),
             coordinates=_extract_coordinates(fields.get("经纬度", ())),
-            display_forms=_unique_values(fields.get("展示形式", ())),
-            organization=_first_value(fields, "保护单位") or _first_value(fields, "联系"),
-            history=_first_value(fields, "历史") or _first_value(fields, "主要时间"),
+            display_forms=_unique_values(fields.get("关键手法", ())),
+            organization=_first_value(fields, "来源名称"),
+            history="",
             features=features_val,
             cultural_value=cv_val,
             _evidence=evidence,
         )
 
-    def extract_batch(self, items: list[HeritageItem]) -> dict[str, StructuredMeta]:
+    def extract_batch(self, items: list[CaseItem]) -> dict[str, StructuredMeta]:
         return {item.id: self.extract(item) for item in items}
 
 
 def _extract_level(fields: dict[str, tuple[str, ...]]) -> tuple[str, dict[str, Any]]:
-    value = _first_value(fields, "归属")
+    value = _first_value(fields, "风险等级")
     mapped = _normalize_level(value)
     confidence = 1.0 if mapped else 0.0
     return mapped, _evidence_dict(source_text=value, method="rule", confidence=confidence)
@@ -295,7 +271,7 @@ def _infer_audience_from_scenarios(scenarios: tuple[str, ...]) -> tuple[str, ...
     return tuple(dict.fromkeys(audience))
 
 
-def _extract_cultural_keywords(item: HeritageItem, features: str) -> tuple[str, ...]:
+def _extract_cultural_keywords(item: CaseItem, features: str) -> tuple[str, ...]:
     keywords: list[str] = []
     text = f"{item.category} {features} {item.summary[:200]}"
     # extract 2-4 char Chinese nouns as candidate keywords
@@ -310,11 +286,11 @@ def _extract_cultural_keywords(item: HeritageItem, features: str) -> tuple[str, 
     return tuple(keywords)
 
 
-def infer_soft_labels(item: HeritageItem, meta: StructuredMeta) -> SoftLabels:
+def infer_soft_labels(item: CaseItem, meta: StructuredMeta) -> SoftLabels:
     """Compute soft labels (suitable_scenarios + creative_product_potential only).
 
     display_difficulty, interaction_potential, education_value, target_audience,
-    and cultural_keywords have been removed from HeritageItem — use the standalone
+    and cultural_keywords have been removed from CaseItem — use the standalone
     helpers (_infer_* functions) directly if needed for scoring.
     """
     category = item.category
@@ -370,12 +346,6 @@ def _first_value(fields: dict[str, tuple[str, ...]], name: str) -> str:
 def _province_from_region(region: str) -> str:
     match = _PROVINCE_PATTERN.search(region)
     return match.group(1) if match else ""
-
-
-def _normalize_province(province: str, city: str) -> tuple[str, str]:
-    if city in _HENAN_CITIES and province != "河南省":
-        return "河南省", "rule_infer"
-    return province, "rule"
 
 
 def _split_people(value: str) -> tuple[str, ...]:

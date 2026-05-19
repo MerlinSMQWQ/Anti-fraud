@@ -35,7 +35,7 @@ def _parse_tuple(value: Any) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True)
-class HeritageItem:
+class CaseItem:
     """Core anti-fraud case item with 13 stable fields.
 
     Soft labels (education_value, interaction_potential, etc.) and
@@ -95,7 +95,7 @@ class KnowledgeBase:
             for category in payload.get("categories", [])
         ]
         self.items = [
-            HeritageItem(
+            CaseItem(
                 id=str(item["id"]),
                 title=str(item["title"]),
                 family=str(item.get("family") or ""),
@@ -114,7 +114,7 @@ class KnowledgeBase:
         ]
         self._by_id = {item.id: item for item in self.items}
 
-    def get(self, item_id: str) -> HeritageItem | None:
+    def get(self, item_id: str) -> CaseItem | None:
         return self._by_id.get(item_id)
 
     def category_names(self) -> list[str]:
@@ -132,7 +132,7 @@ def get_knowledge_base() -> KnowledgeBase:
 
 
 def get_structured_meta(item_id: str) -> "StructuredMeta | None":
-    """Backward-compatible adapter: build StructuredMeta from HeritageItem + ai_fields."""
+    """Backward-compatible adapter: build StructuredMeta from CaseItem + ai_fields."""
     from .extractor import StructuredMeta
 
     kb = get_knowledge_base()
@@ -165,7 +165,7 @@ def get_soft_labels(item_id: str) -> "SoftLabels | None":
     return infer_soft_labels(item, meta)
 
 
-def item_to_dict(item: HeritageItem, include_content: bool = False) -> dict[str, Any]:
+def item_to_dict(item: CaseItem, include_content: bool = False) -> dict[str, Any]:
     data = {
         "id": item.id,
         "title": item.title,

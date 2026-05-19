@@ -154,11 +154,11 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     for entity_name, item, meta, labels in resolved:
         lines.append(f"### {entity_name}")
         if meta and meta.features:
-            lines.append(f"**技艺特点：**{meta.features[:200]}")
+            lines.append(f"**诈骗手法：**{meta.features[:200]}")
         if meta and meta.history:
-            lines.append(f"**历史背景：**{meta.history[:200]}")
+            lines.append(f"**来源：**{meta.history[:200]}")
         if meta and meta.cultural_value:
-            lines.append(f"**文化价值：**{meta.cultural_value[:200]}")
+            lines.append(f"**防范建议：**{meta.cultural_value[:200]}")
         if not (meta and (meta.features or meta.history or meta.cultural_value)):
             lines.append(f"{item.summary[:300]}")
         lines.append("")
@@ -171,7 +171,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     levels = [meta.level if meta else "" for _, _, meta, _ in resolved]
     unique_levels = list(dict.fromkeys(levels))
     if len(unique_levels) > 1:
-        summary_parts.append(f"级别上，{'、'.join(f'{name}为{lv}' for (name, _, _, _), lv in zip(resolved, levels))}")
+        summary_parts.append(f"风险等级上，{'、'.join(f'{name}为{lv}' for (name, _, _, _), lv in zip(resolved, levels))}")
     else:
         summary_parts.append(f"两项风险等级均为{unique_levels[0]}")
 
