@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .agent_models import AgentResult, TaskType
-from .dataset import KnowledgeBase, get_soft_labels, get_structured_meta, normalize_text
+from .dataset import KnowledgeBase, get_ai_fields, normalize_text
 from .item_cards import _enriched_item_card, _source_payload, _title_with_family
 
 
@@ -48,16 +48,16 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
         )
 
     # Search each target entity in the KB
-    resolved: list[tuple[str, Any, Any, Any]] = []  # (entity_name, item, meta, labels)
+    resolved: list[tuple[str, Any, Any, Any]] = []  # (entity_name, item, ai_fields)
     unmatched: list[str] = []
     used_item_ids: set[str] = set()
 
     for t in targets:
         match = _resolve_comparison_target(kb, t, used_item_ids)
         if match:
-            display_name, item, meta, labels = match
+            display_name, item, ai = match
             used_item_ids.add(item.id)
-            resolved.append((display_name, item, meta, labels))
+            resolved.append((display_name, item, ai))
         else:
             unmatched.append(t)
 
@@ -135,7 +135,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     lines.append(_row("类别", *(item.category for _, item, _, _ in resolved)))
 
     # Level row
-    lines.append(_row("级别", *(meta.level if meta else "—" for _, _, meta, _ in resolved)))
+    lines.append(_row("风险等级", *(meta.level if meta else "\u2014" for _, _, meta, _ in resolved)))
 
     # Province row
     lines.append(_row("省份", *(meta.province if meta else "—" for _, _, meta, _ in resolved)))
@@ -145,21 +145,21 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
 
     # Display forms
     lines.append(_row(
-        "展示形式",
-        *("、".join(meta.display_forms) if meta and meta.display_forms else "—" for _, _, meta, _ in resolved),
+        "入口渠道",
+        *("、".join(meta.entry_channels) if meta and meta.entry_channels else "\u2014" for _, _, meta, _ in resolved),
     ))
 
     # ── Narrative sections ──
     lines.append("")
-    for entity_name, item, meta, labels in resolved:
+    for entity_name, item, ai in resolved:
         lines.append(f"### {entity_name}")
-        if meta and meta.features:
-            lines.append(f"**诈骗手法：**{meta.features[:200]}")
-        if meta and meta.history:
-            lines.append(f"**来源：**{meta.history[:200]}")
-        if meta and meta.cultural_value:
-            lines.append(f"**防范建议：**{meta.cultural_value[:200]}")
-        if not (meta and (meta.features or meta.history or meta.cultural_value)):
+        if ai.get("key_methods"):
+            lines.append(f"**诈骗手法：**{ai['key_methods'][:200]}")
+        if ai.get("history"):
+            lines.append(f"**来源：**{ai['history'][:200]}")
+        if ai.get("prevention_advice"):
+            lines.append(f"**防范建议：**{ai['prevention_advice'][:200]}")
+        if not (ai.get("key_methods") or ai.get("history") or ai.get("prevention_advice")):
             lines.append(f"{item.summary[:300]}")
         lines.append("")
 
@@ -168,7 +168,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     summary_parts: list[str] = []
 
     # Level comparison
-    levels = [meta.level if meta else "" for _, _, meta, _ in resolved]
+    levels = [item.level or "" for _, item, _ in resolved]
     unique_levels = list(dict.fromkeys(levels))
     if len(unique_levels) > 1:
         summary_parts.append(f"风险等级上，{'、'.join(f'{name}为{lv}' for (name, _, _, _), lv in zip(resolved, levels))}")
@@ -294,9 +294,8 @@ def _resolve_comparison_target(kb: KnowledgeBase, target: str, used_item_ids: se
             score += 25
 
         if score > best_score:
-            meta = get_structured_meta(item.id)
-            labels = get_soft_labels(item.id)
-            best = (_title_with_family(item), item, meta, labels)
+            ai = get_ai_fields(item.id)
+            best = (_title_with_family(item), item, ai)
             best_score = score
 
     if best_score < 60:

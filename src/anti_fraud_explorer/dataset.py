@@ -1,4 +1,4 @@
-"""Dataset loading and normalized in-memory access."""
+"""Dataset loading and normalized in-memory access — v3 schema (LLM-normalized)."""
 
 from __future__ import annotations
 
@@ -7,14 +7,9 @@ import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .config import settings
-
-if TYPE_CHECKING:
-    from .extractor import SoftLabels, StructuredMeta
-
-_AI_FIELDS_PATH = settings.dataset_path.parent / "ai_fields.json"
 
 
 def normalize_text(value: str) -> str:
@@ -28,56 +23,149 @@ class Category:
     item_count: int
 
 
-def _parse_tuple(value: Any) -> tuple[str, ...]:
+def _parse_multivalue(value: Any) -> tuple[str, ...]:
+    """Parse a string like '电话；短信' or a list into a tuple."""
     if isinstance(value, (list, tuple)):
         return tuple(str(v) for v in value)
+    if isinstance(value, str) and value.strip():
+        return tuple(s.strip() for s in value.split("；") if s.strip())
     return ()
+
+
+def _first_value(value: Any) -> str:
+    """Get the first value from a multi-value field, or the string itself."""
+    if isinstance(value, (list, tuple)):
+        return str(value[0]) if value else ""
+    if isinstance(value, str) and "；" in value:
+        return value.split("；")[0].strip()
+    return str(value) if value else ""
 
 
 @dataclass(frozen=True)
 class CaseItem:
-    """Core anti-fraud case item with 13 stable fields.
-
-    Soft labels (education_value, interaction_potential, etc.) and
-    LLM-enriched fields (history, features, cultural_value) are
-    loaded on demand from ai_fields.json or computed via RuleExtractor.
-    """
+    """Anti-fraud case item — populated from LLM-normalized dataset (schema v3)."""
 
     id: str
     title: str
-    family: str
-    category: str
     summary: str
-    content: str
-    search_text: str
-    # ── geo / level ──
-    level: str = ""
-    province: str = ""
-    city: str = ""
-    district: str = ""
-    # ── display ──
-    display_forms: tuple[str, ...] = ()
-    suitable_scenarios: tuple[str, ...] = ()
+
+    # ── Primary classification ──
+    ccl2023_category: str = ""
+
+    # ── Rich structured fields (directly from dataset) ──
+    nature_judgment: str = ""
+    judgment_reason: str = ""
+    entry_channels: tuple[str, ...] = ()
+    impersonated_identity: str = ""
+    false_belief: str = ""
+    key_methods: tuple[str, ...] = ()
+    target_assets: str = ""
+    fraud_stage: str = ""
+    risk_signals: str = ""
+    risk_level: str = ""
+    loss_occurred: str = ""
+    loss_type: str = ""
+    prevention_advice: str = ""
+    source_name: str = ""
+    source_type: str = ""
+    collection_date: str = ""
+    is_desensitized: str = ""
+
+    # ── Supplementary ──
+    official_category: str = ""
+    custom_subcategory: str = ""
+    tags: tuple[str, ...] = ()
+    involved_platforms: str = ""
+    victim_group: str = ""
+
+    # ── Computed fields (for search / display) ──
+
+    @property
+    def family(self) -> str:
+        """Parent category — the broad CCL2023 class name."""
+        return self.ccl2023_category
+
+    @property
+    def category(self) -> str:
+        """Same as ccl2023_category for backward compat."""
+        return self.ccl2023_category
+
+    @property
+    def content(self) -> str:
+        """Full text payload for embedding / context — built from structured fields."""
+        parts = []
+        if self.summary:
+            parts.append(self.summary)
+        if self.judgment_reason:
+            parts.append(self.judgment_reason)
+        if self.risk_signals:
+            parts.append(self.risk_signals)
+        if self.prevention_advice:
+            parts.append(self.prevention_advice)
+        return "\n".join(parts)
+
+    @property
+    def search_text(self) -> str:
+        """Lightweight text for lexical search (title + category + tags + methods + channels)."""
+        parts = [self.title, self.ccl2023_category]
+        if self.tags:
+            parts.extend(self.tags)
+        if self.key_methods:
+            parts.extend(self.key_methods)
+        if self.entry_channels:
+            parts.extend(self.entry_channels)
+        return " ".join(parts)
+
+    @property
+    def level(self) -> str:
+        """Backward-compat: risk_level mapped to old level enum."""
+        return self.risk_level
+
+    @property
+    def province(self) -> str:
+        """Province is no longer extracted at build time. Returns empty."""
+        return ""
+
+    @property
+    def city(self) -> str:
+        """City is no longer extracted at build time. Returns empty."""
+        return ""
+
+    @property
+    def district(self) -> str:
+        """District is no longer extracted at build time. Returns empty."""
+        return ""
+
+    @property
+    def suitable_scenarios(self) -> tuple[str, ...]:
+        """Scenarios are no longer pre-computed. Returns empty."""
+        return ()
 
 
-@lru_cache(maxsize=1)
-def _load_ai_fields() -> dict[str, dict[str, str]]:
-    """Load LLM-enriched fields (features, history, cultural_value)."""
-    if not _AI_FIELDS_PATH.exists():
-        return {}
-    with _AI_FIELDS_PATH.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
+# ── ai_fields are now inline in CaseItem — kept for callers that still import it ──
 
 def get_ai_fields(item_id: str) -> dict[str, str]:
-    """Get LLM-enriched fields for an item. Returns dict with keys:
-    features, history, cultural_value (may be empty strings if missing).
-    """
-    fields = _load_ai_fields().get(item_id, {})
+    """Return ai_fields from CaseItem. Deprecated: fields are now inline."""
+    kb = get_knowledge_base()
+    item = kb.get(item_id)
+    if item is None:
+        return {"key_methods": "", "history": "", "prevention_advice": ""}
     return {
-        "features": fields.get("features", ""),
-        "history": fields.get("history", ""),
-        "cultural_value": fields.get("cultural_value", ""),
+        "key_methods": "；".join(item.key_methods),
+        "history": item.source_name,
+        "prevention_advice": item.prevention_advice,
+    }
+
+
+def get_structured_meta(item_id: str) -> dict[str, Any]:
+    """Return structured metadata. Deprecated: fields are now inline."""
+    kb = get_knowledge_base()
+    item = kb.get(item_id)
+    if item is None:
+        return {"level": "", "entry_channels": ()}
+    return {
+        "level": item.risk_level,
+        "entry_channels": item.entry_channels,
     }
 
 
@@ -96,19 +184,32 @@ class KnowledgeBase:
         ]
         self.items = [
             CaseItem(
-                id=str(item["id"]),
-                title=str(item["title"]),
-                family=str(item.get("family") or ""),
-                category=str(item.get("category") or "未分类"),
+                id=str(item.get("case_id") or item.get("id") or ""),
+                title=str(item.get("title") or ""),
                 summary=str(item.get("summary") or ""),
-                content=str(item.get("content") or ""),
-                search_text=str(item.get("search_text") or ""),
-                level=str(item.get("level") or ""),
-                province=str(item.get("province") or ""),
-                city=str(item.get("city") or ""),
-                district=str(item.get("district") or ""),
-                display_forms=_parse_tuple(item.get("display_forms")),
-                suitable_scenarios=_parse_tuple(item.get("suitable_scenarios")),
+                ccl2023_category=str(item.get("ccl2023_category") or ""),
+                nature_judgment=str(item.get("nature_judgment") or ""),
+                judgment_reason=str(item.get("judgment_reason") or ""),
+                entry_channels=_parse_multivalue(item.get("entry_channels")),
+                impersonated_identity=str(item.get("impersonated_identity") or ""),
+                false_belief=str(item.get("false_belief") or ""),
+                key_methods=_parse_multivalue(item.get("key_methods")),
+                target_assets=str(item.get("target_assets") or ""),
+                fraud_stage=str(item.get("fraud_stage") or ""),
+                risk_signals=str(item.get("risk_signals") or ""),
+                risk_level=str(item.get("risk_level") or ""),
+                loss_occurred=str(item.get("loss_occurred") or ""),
+                loss_type=str(item.get("loss_type") or ""),
+                prevention_advice=str(item.get("prevention_advice") or ""),
+                source_name=str(item.get("source_name") or ""),
+                source_type=str(item.get("source_type") or ""),
+                collection_date=str(item.get("collection_date") or ""),
+                is_desensitized=str(item.get("is_desensitized") or ""),
+                official_category=str(item.get("official_category") or ""),
+                custom_subcategory=str(item.get("custom_subcategory") or ""),
+                tags=_parse_multivalue(item.get("tags")),
+                involved_platforms=str(item.get("involved_platforms") or ""),
+                victim_group=str(item.get("victim_group") or ""),
             )
             for item in payload.get("items", [])
         ]
@@ -133,40 +234,6 @@ def get_knowledge_base() -> KnowledgeBase:
     return load_dataset()
 
 
-def get_structured_meta(item_id: str) -> "StructuredMeta | None":
-    """Backward-compatible adapter: build StructuredMeta from CaseItem + ai_fields."""
-    from .extractor import StructuredMeta
-
-    kb = get_knowledge_base()
-    item = kb.get(item_id)
-    if item is None:
-        return None
-    ai = get_ai_fields(item_id)
-    return StructuredMeta(
-        level=item.level,
-        province=item.province,
-        city=item.city,
-        district=item.district,
-        display_forms=item.display_forms,
-        history=ai["history"],
-        features=ai["features"],
-        cultural_value=ai["cultural_value"],
-    )
-
-
-def get_soft_labels(item_id: str) -> "SoftLabels | None":
-    """Compute soft labels on-the-fly via RuleExtractor."""
-    from .extractor import RuleExtractor, infer_soft_labels
-
-    kb = get_knowledge_base()
-    item = kb.get(item_id)
-    if item is None:
-        return None
-    extractor = RuleExtractor()
-    meta = extractor.extract(item)
-    return infer_soft_labels(item, meta)
-
-
 def item_to_dict(item: CaseItem, include_content: bool = False) -> dict[str, Any]:
     data = {
         "id": item.id,
@@ -174,18 +241,22 @@ def item_to_dict(item: CaseItem, include_content: bool = False) -> dict[str, Any
         "family": item.family,
         "category": item.category,
         "summary": item.summary,
-        "level": item.level,
+        "level": item.risk_level,
         "province": item.province,
         "city": item.city,
         "district": item.district,
-        "display_forms": list(item.display_forms),
+        "entry_channels": list(item.entry_channels),
         "suitable_scenarios": list(item.suitable_scenarios),
+        "key_methods": list(item.key_methods),
+        "history": item.source_name,
+        "prevention_advice": item.prevention_advice,
+        # New fields
+        "ccl2023_category": item.ccl2023_category,
+        "risk_level": item.risk_level,
+        "nature_judgment": item.nature_judgment,
+        "risk_signals": item.risk_signals,
+        "tags": list(item.tags),
     }
-    # Merge ai_fields for API consumers
-    ai = get_ai_fields(item.id)
-    data["features"] = ai["features"]
-    data["history"] = ai["history"]
-    data["cultural_value"] = ai["cultural_value"]
     if include_content:
         data["content"] = item.content
     return data

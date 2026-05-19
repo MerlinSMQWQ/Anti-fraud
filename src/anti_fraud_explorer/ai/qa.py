@@ -26,7 +26,7 @@ class Answer:
 
 def answer_question(kb: KnowledgeBase, question: str, category: str = "", include_speech: bool = True) -> Answer:
     from ..ai.client import call_chat_model, describe_model_error
-    from ..ai.speech import build_spoken_answer
+    from ..ai.spoken import build_spoken_answer
 
     question = normalize_text(question)
     category = normalize_text(category)
@@ -58,7 +58,7 @@ def answer_question(kb: KnowledgeBase, question: str, category: str = "", includ
                 answer=fallback,
                 mode="fallback",
                 sources=[source_payload(item) for item in sources],
-                speech=build_spoken_answer(fallback, question=question, sources=sources, prefer_model=False)
+                speech=build_spoken_answer(fallback, question=question, sources=sources)
                 if include_speech
                 else "",
             )
@@ -68,7 +68,7 @@ def answer_question(kb: KnowledgeBase, question: str, category: str = "", includ
         answer=answer,
         mode="local",
         sources=[source_payload(item) for item in sources],
-        speech=build_spoken_answer(answer, question=question, sources=sources, prefer_model=False)
+        speech=build_spoken_answer(answer, question=question, sources=sources)
         if include_speech
         else "",
     )
@@ -82,8 +82,9 @@ def fact_question_sources(
 ) -> list[CaseItem]:
     """Choose grounded sources for factual answers.
 
-    Direct item questions like "汴绣是什么" should stay anchored to 汴绣 rather
-    than using semantic search to fill the source list with loosely related items.
+    Direct item questions like "刷单返利是什么" should stay anchored to the
+    exact item rather than using semantic search to fill the source list
+    with loosely related items.
     """
     search_query = normalize_search_query(question)
     direct_matches = direct_item_matches(kb, search_query, category=category)

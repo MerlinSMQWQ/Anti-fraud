@@ -6,14 +6,14 @@
 | **名称：**{{ title }}。 | **Name:** {{ title }}. |
 | **案例定位：**{{ title }} 属于{{ category }}{% if level %}，风险等级为{{ level }}{% endif %}。 | **Positioning:** {{ title }} is a {{ category }} case{% if level %} with a {{ level }} risk level{% endif %}. |
 | **简介：**{{ summary }} | **Introduction:** Configure an LLM API key to generate a polished English introduction. |
-| **主要特色：**{{ features[:220] }}{% if features|length > 220 %}......{% endif %} | **Key Features:** Configure an LLM API key to generate a matching English feature paragraph. |
+| **关键手法：**{{ key_methods[:220] }}{% if key_methods|length > 220 %}......{% endif %} | **Key Tactics:** Configure an LLM API key to generate a matching English feature paragraph. |
 
 {%- elif transform_type in ("年轻化", "朋友圈") %}
 ## {{ title }} . 轻松版提醒
 
 这类{{ category }}很容易伪装成日常消息{% if level %}，风险等级为{{ level }}{% endif %}。
 
-{{ features[:200] }}......
+{{ key_methods[:200] }}......
 
 看到类似套路时，先停一下、再核实，不要急着转账或填写验证码。
 
@@ -25,7 +25,7 @@
 从 {{ title }} 的关键话术、风险信号和转账节点中提取视觉重点。
 
 ### 可提取元素
-- 风险信号：{{ features[:100] }}......
+- 风险信号：{{ key_methods[:100] }}......
 - 视觉提示：[建议：突出陌生链接、转账要求、验证码索取等高危动作]
 - 提醒短句：[建议：整理成一句醒目的防骗口号]
 
@@ -45,7 +45,7 @@
 
 各位朋友，大家好。今天我们拆解的案例是{{ title }}，它属于{{ category }}。{{ summary }}
 
-它最值得关注的地方，是这些容易让人放松警惕的风险信号：{{ features[:220] }}......
+它最值得关注的地方，是这些容易让人放松警惕的风险信号：{{ key_methods[:220] }}......
 
 如果把它放到宣讲或课堂里，可以从诈骗入口、诱导话术、转账节点和正确处置四个角度展开，让听众既能看懂套路，也能记住遇到类似情况时该先核实、再行动。
 
@@ -55,7 +55,7 @@
 
 {{ summary }}
 
-**核心特色：**{{ features[:200] }}
+**关键手法：**{{ key_methods[:200] }}
 
 *本地模板生成，配置 API Key 可获得更优化的改写内容。*
 {%- endif %}

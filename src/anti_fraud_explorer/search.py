@@ -73,8 +73,8 @@ def _build_pinyin_index(kb_hash: str) -> dict[str, list[str]]:
         index: dict[str, list[str]] = {}
         for item in kb.items:
             texts = [item.title]
-            if item.family:
-                texts.append(item.family)
+            if item.ccl2023_category:
+                texts.append(item.ccl2023_category)
             for text in texts:
                 py = "".join(lazy_pinyin(text))
                 py_compact = py.replace(" ", "")
@@ -272,13 +272,7 @@ def has_title_substring_match(items: list[CaseItem], query: str) -> bool:
 
 
 def has_location_token_match(items: list[CaseItem], query: str) -> bool:
-    tokens = [token for token in tokenize(query) if len(token) >= 2]
-    if not tokens:
-        return False
-    for item in items[:8]:
-        location = f"{item.province} {item.city} {item.district}".lower()
-        if any(token.lower() in location for token in tokens):
-            return True
+    # Location fields are no longer extracted in v3 schema
     return False
 
 
@@ -363,8 +357,7 @@ def strong_match_bonus(item: CaseItem, query: str, tokens: list[str]) -> float:
         return 0.0
 
     title = item.title.lower()
-    family = item.family.lower()
-    category = item.category.lower()
+    family_cat = item.ccl2023_category.lower()
     bonus = 0.0
 
     if query == title:
@@ -372,15 +365,10 @@ def strong_match_bonus(item: CaseItem, query: str, tokens: list[str]) -> float:
     elif query in title:
         bonus += 0.35
 
-    if query == family:
-        bonus += 0.25
-    elif family and query in family:
-        bonus += 0.08
-
-    if query == category:
-        bonus += 0.2
-    elif query in category:
-        bonus += 0.1
+    if query == family_cat:
+        bonus += 0.4
+    elif family_cat and query in family_cat:
+        bonus += 0.15
 
     for token in tokens:
         if not token:
@@ -389,14 +377,10 @@ def strong_match_bonus(item: CaseItem, query: str, tokens: list[str]) -> float:
             bonus += 0.06
         elif token in title:
             bonus += 0.004
-        if token == family:
-            bonus += 0.04
-        elif family and token in family:
-            bonus += 0.003
-        if token == category:
-            bonus += 0.08
-        elif token in category:
-            bonus += 0.003
+        if token == family_cat:
+            bonus += 0.10
+        elif family_cat and token in family_cat:
+            bonus += 0.005
 
     return bonus
 
@@ -409,12 +393,7 @@ def lexical_tiebreak(score: float) -> float:
 
 def score_item(item: CaseItem, query: str, tokens: list[str]) -> float:
     title = item.title.lower()
-    family = item.family.lower()
-    category = item.category.lower()
-    province = item.province.lower()
-    city = item.city.lower()
-    district = item.district.lower()
-    location = " ".join(part for part in (province, city, district) if part)
+    family_cat = item.ccl2023_category.lower()
     summary = item.summary.lower()
     content = item.content.lower()
     search_text = item.search_text.lower()
@@ -424,12 +403,8 @@ def score_item(item: CaseItem, query: str, tokens: list[str]) -> float:
         score += 100
     if query and query in title:
         score += 40
-    if query and query in family:
-        score += 18
-    if query and query in category:
-        score += 16
-    if query and query in location:
-        score += 18
+    if query and query in family_cat:
+        score += 30
     if query and query in summary:
         score += 10
     if query and query in content:
@@ -438,14 +413,8 @@ def score_item(item: CaseItem, query: str, tokens: list[str]) -> float:
     for token in tokens:
         if token in title:
             score += 12
-        if token in family:
-            score += 6
-        if token in category:
-            score += 5
-        if token in province:
+        if token in family_cat:
             score += 10
-        elif token in city or token in district:
-            score += 8
         if token in summary:
             score += 3
         if token in search_text:

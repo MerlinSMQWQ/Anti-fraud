@@ -40,7 +40,7 @@ def scenario_match_score(item: Any, scenario: str) -> int:
         return 0
 
     terms = SCENARIO_EVIDENCE_TERMS.get(scenario, (scenario,))
-    display_text = normalize_text(" ".join(getattr(item, "display_forms", ()) or ()))
+    display_text = normalize_text(" ".join(getattr(item, "entry_channels", ()) or ()))
     source_text = normalize_text(
         " ".join(
             str(part or "")

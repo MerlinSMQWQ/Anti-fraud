@@ -1,6 +1,6 @@
 import { state, bindElements, els } from './state.js';
 import { speechSupported } from './consts.js';
-import { initHuman, configureHumanVideoPlayback, scheduleHumanVideoAdvance, restoreHumanVideoAfterVisibility } from './human.js';
+import { initHuman } from './human.js';
 import { stopSpeech, unlockSpeech, setVoiceStatus, voiceState, replayLastSpeech, hasReplayableSpeech, pauseSpeechForVisibility, resumeSpeechAfterVisibility } from './speech.js';
 import { renderQuerySuggestions, loadMeta, resizeQuestionInput, syncRestoredQuestion, handleQuestionInput } from './ui.js';
 import { renderRelatedItems, updateRelatedPanelTitle, searchRightPanel, searchByCategory, showDetail, hideDetail, loadCategoryChips } from './search.js';
@@ -21,8 +21,7 @@ function init() {
     answerBox: document.querySelector("#answerBox"),
     answerMode: document.querySelector("#answerMode"),
     digitalHumanPanel: document.querySelector(".hanging-scroll"),
-    digitalHumanVideo: document.querySelector("#digitalHumanVideo"),
-    digitalHumanVideoNext: document.querySelector("#digitalHumanVideoNext"),
+    digitalHumanImg: document.querySelector("#digitalHumanImg"),
     digitalHumanStatus: document.querySelector("#digitalHumanStatus"),
     digitalHumanSpeech: document.querySelector("#digitalHumanSpeech"),
     rightSearchInput: document.querySelector("#rightSearchInput"),
@@ -42,8 +41,6 @@ function init() {
   stopSpeech({ delayed: true, preserveHuman: true });
 
   // Initial setup
-  configureHumanVideoPlayback(els.digitalHumanVideo, "idle");
-  scheduleHumanVideoAdvance(els.digitalHumanVideo, "idle");
   renderQuerySuggestions();
   loadMeta();
   updateRelatedPanelTitle();
@@ -104,7 +101,6 @@ function init() {
     if (document.hidden) {
       pauseSpeechForVisibility();
     } else {
-      restoreHumanVideoAfterVisibility();
       resumeSpeechAfterVisibility();
     }
   });

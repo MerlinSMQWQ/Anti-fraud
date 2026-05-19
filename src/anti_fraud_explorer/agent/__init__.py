@@ -30,7 +30,7 @@ from ..dataset import (
 )
 from ..item_cards import _enriched_item_card, _source_payload, _title_with_family
 from ..scenario_evidence import scenario_is_hard_match, scenario_match_score
-from ..transform_config import (
+from ..prompts import (
     DEFAULT_TRANSFORM_TYPE,
     TRANSFORM_MAX_TOKENS,
     TRANSFORM_PROMPTS,
@@ -349,6 +349,9 @@ class Agent:
             extra_options=agent_planner_extra_options(),
         )
         payload = json.loads(extract_json_object(raw))
+        LOGGER.info("Planner payload: action=%s task_type=%s search_queries=%s answer_len=%s",
+                     payload.get("action"), payload.get("task_type"),
+                     payload.get("search_queries"), len(payload.get("answer") or ""))
         if not isinstance(payload, dict):
             raise ValueError("Subsequent-turn model did not return a JSON object")
         return payload
@@ -446,7 +449,7 @@ class Agent:
             "JSON 格式："
             "{\"action\":\"answer|search\","
             "\"task_type\":\"chitchat|fact_qa|browse_query|comparison|recommendation|"
-            "lecture_plan|study_task|content_transform\",\"
+            "lecture_plan|study_task|content_transform\","
             "\"confidence\":0.0,\"reason\":\"一句内部理由\","
             "\"search_queries\":[\"关键词\"]或null,"
             "\"answer\":\"回答文本\"或null,"
@@ -533,19 +536,17 @@ class Agent:
         )
         label = f"- [{item_id}] {title}" if item_id else f"- {title}"
         lines = [f"{label} | {meta}" if meta else label]
-        for key, label_name in (
-            ("summary", "简介"),
-            ("features", "特色"),
-            ("history", "历史"),
-            ("cultural_value", "价值"),
-            ("content", "正文摘要"),
-        ):
+        from ..prompts import FRAUD_LABEL_MAP
+
+        for key in ("summary", "features", "history", "cultural_value", "content"):
             value = normalize_text(item.get(key) or "")
             if value:
+                label_name = FRAUD_LABEL_MAP.get(key, key)
                 lines.append(f"  {label_name}：{value[:240]}")
-        forms = item.get("display_forms")
+        forms = item.get("entry_channels")
         if isinstance(forms, list) and forms:
-            lines.append(f"  展示形式：{'、'.join(str(form) for form in forms[:6])}")
+            label_name = FRAUD_LABEL_MAP.get("entry_channels", "入口渠道")
+            lines.append(f"  {label_name}：{'、'.join(str(form) for form in forms[:6])}")
         return "\n".join(lines)
 
     def _payload_action(self, payload: dict[str, Any]) -> str:
@@ -702,7 +703,7 @@ class Agent:
             categories.add(category)
         title_keywords = _context_title_keywords(context_items)
         context_ids = {item.id for item in context_items}
-        forms = {form for item in context_items for form in item.display_forms}
+        forms = {form for item in context_items for form in item.entry_channels}
         scenarios = {scenario for item in context_items for scenario in item.suitable_scenarios}
 
         scored: list[tuple[int, str, Any]] = []
@@ -714,7 +715,7 @@ class Agent:
                 score += 6
             if any(keyword and (keyword in item.title or keyword in item.family) for keyword in title_keywords):
                 score += 10
-            if forms and any(form in forms for form in item.display_forms):
+            if forms and any(form in forms for form in item.entry_channels):
                 score += 2
             if scenarios and any(scenario in scenarios for scenario in item.suitable_scenarios):
                 score += 1
@@ -754,9 +755,9 @@ class Agent:
                 score += scenario_score
             if province:
                 score += 8
-            if re.search(r"展示|宣传|宣讲|班会", query) and item.display_forms:
+            if re.search(r"展示|宣传|宣讲|班会", query) and item.entry_channels:
                 score += 4
-            if re.search(r"活动|互动", query) and item.display_forms:
+            if re.search(r"活动|互动", query) and item.entry_channels:
                 score += 4
             if item.level == "极高":
                 score += 4
@@ -764,8 +765,8 @@ class Agent:
                 score += 3
             elif item.level == "中":
                 score += 1
-            if item.display_forms:
-                score += min(len(item.display_forms), 3)
+            if item.entry_channels:
+                score += min(len(item.entry_channels), 3)
             if score <= 0:
                 continue
             scored.append((score, item.title, item))
@@ -1096,6 +1097,7 @@ class Agent:
         include_speech: bool,
         query: str = "",
     ):
+
         # If handler already filled speech, yield result as-is
         if not include_speech or result.speech:
             yield with_agent_decision(result, decision, include_speech)
@@ -1203,10 +1205,10 @@ class Agent:
         summary = target_item.summary[:200]
 
         ai = get_ai_fields(target_item.id)
-        features = ai["features"][:200] if ai["features"] else summary
+        features = ai["key_methods"][:200] if ai["key_methods"] else summary
         history = ai["history"][:200] if ai["history"] else ""
-        display = "、".join(target_item.display_forms) if target_item.display_forms else "展板 + 讲解"
-        cultural_value = ai["cultural_value"][:200] if ai["cultural_value"] else ""
+        display = "、".join(target_item.entry_channels) if target_item.entry_channels else "展板 + 讲解"
+        cultural_value = ai["prevention_advice"][:200] if ai["prevention_advice"] else ""
 
         answer = _render_template(
             "study_task.md.j2",
@@ -1271,7 +1273,6 @@ class Agent:
                 warnings=["未识别到具体反诈案例，已退回通用问答"],
             )
 
-        meta = get_structured_meta(target_item.id)
         transform_type = analysis.transform_type
 
         # Determine transform type if not detected by QueryAnalyzer
@@ -1300,11 +1301,11 @@ class Agent:
             context_lines.append(f"城市：{target_item.city}")
         if target_item.level:
             context_lines.append(f"级别：{target_item.level}")
-        if ai["features"]:
+        if ai["key_methods"]:
             context_lines.append(f"关键手法：{ai['features']}")
         if ai["history"]:
             context_lines.append(f"来源：{ai['history']}")
-        if ai["cultural_value"]:
+        if ai["prevention_advice"]:
             context_lines.append(f"防范建议：{ai['cultural_value']}")
         context_lines.append(f"简介：{target_item.summary}")
         context_lines.append(f"正文片段：{target_item.content[:800]}")
@@ -1338,7 +1339,7 @@ class Agent:
                 mode="unavailable",
                 confidence=0.0,
             )
-        local_answer = _build_transform_local(transform_type, target_item, meta)
+        local_answer = _build_transform_local(transform_type, target_item)
         return AgentResult(
             task_type=TaskType.CONTENT_TRANSFORM,
             answer=local_answer,
@@ -1508,9 +1509,9 @@ class Agent:
         for i, item in enumerate(top, 1):
             title = _title_with_family(item)
             location = "、".join(part for part in [item.province, item.city, item.district] if part)
-            display = "、".join(item.display_forms) if item.display_forms else "案例讲解、风险提示"
+            display = "、".join(item.entry_channels) if item.entry_channels else "案例讲解、风险提示"
             ai = get_ai_fields(item.id)
-            feature_text = ai["features"] or item.summary
+            feature_text = ai["key_methods"] or item.summary
             feature_text = _short_text(feature_text, 150)
             summary = _short_text(item.summary, 120)
             boundary = _recommendation_boundary(item, scene_desc)
@@ -1590,7 +1591,7 @@ class Agent:
 
         template_items = []
         for item_data in rec.items:
-            display_str = "、".join(item_data.get("display_forms", ["展板"]))
+            display_str = "、".join(item_data.get("entry_channels", ["展板"]))
             item_title = item_data["title"]
             family = item_data.get("family") or ""
             if family and family not in item_title:
@@ -1688,8 +1689,8 @@ def _score_for_recommendation(item, constraints: list[str],
         score += 1
 
     # Display forms diversity bonus
-    if item.display_forms:
-        score += min(len(item.display_forms), 3)
+    if item.entry_channels:
+        score += min(len(item.entry_channels), 3)
 
     # Category proximity — same category as anchor gets big bonus
     if anchor_category and item.category == anchor_category:
@@ -1713,7 +1714,7 @@ def _short_text(text: str, limit: int) -> str:
 
 
 def _recommendation_boundary(item, scene: str) -> str:
-    forms = "、".join(item.display_forms) if item.display_forms else ""
+    forms = "、".join(item.entry_channels) if item.entry_channels else ""
     scene_text = normalize_text(scene)
     if "亲子" in scene_text:
         if any(key in forms for key in ("电话", "短信", "微信", "App", "二维码", "不明链接")):
@@ -1742,8 +1743,8 @@ def _item_reason_tags(item, scenario: str = "") -> list[str]:
         tags.append("中风险")
 
     # Display forms
-    if item.display_forms:
-        forms = item.display_forms[:3]
+    if item.entry_channels:
+        forms = item.entry_channels[:3]
         tags.append(f"📐 {'·'.join(forms)}")
 
     # Scenario match
@@ -1808,12 +1809,12 @@ def _select_exhibition_core_item(
                 str(item.get("city") or ""),
             ] if part
         )
-        display_forms = "、".join(item.get("display_forms") or [])
+        entry_channels = "、".join(item.get("entry_channels") or [])
         summary = str(item.get("summary") or "").strip()
         candidate_lines.append(
             f"{index}. {item.get('title', '')}\n"
             f"   信息：{meta or '无'}\n"
-            f"   展示形式：{display_forms or '未标注'}\n"
+            f"   入口渠道：{entry_channels or '未标注'}\n"
             f"   简介：{summary[:120]}"
         )
 
@@ -1878,14 +1879,14 @@ def _clean_speech_text(text: str) -> str:
     return text.strip(' ，。')
 
 
-def _build_transform_local(transform_type: str, target_item, meta) -> str:
+def _build_transform_local(transform_type: str, target_item) -> str:
     """Build a template-based local answer for content transformation."""
     title = _title_with_family(target_item)
     category = target_item.category
     summary = target_item.summary
     ai = get_ai_fields(target_item.id)
-    features = ai["features"] if ai["features"] else summary
-    level = meta.level if meta else ""
+    features = ai["key_methods"] if ai["key_methods"] else summary
+    level = target_item.level or ""
 
     return _render_template(
         "transform_local.md.j2",
@@ -1902,12 +1903,12 @@ def _candidate_summaries_for_llm(items, limit: int) -> str:
     """Build item summaries for LLM selection."""
     lines = []
     for item in items:
-        forms = "、".join(item.display_forms) if item.display_forms else "无"
+        forms = "、".join(item.entry_channels) if item.entry_channels else "无"
         location = " · ".join(p for p in [item.province, item.city] if p)
         lines.append(
             f"[{item.id}] {_title_with_family(item)} | "
             f"{item.category} | {item.level} | "
-            f"{location} | 展示：{forms} | "
+            f"{location} | 入口渠道：{forms} | "
             f"{item.summary[:80]}"
         )
     return "\n".join(lines)
@@ -1947,7 +1948,7 @@ def _items_to_llm_context(items, total: int) -> str:
     lines = [f"从资料库中检索到 {total} 条相关反诈案例，以下是其中最相关的：\n"]
     for i, item in enumerate(items[:30], 1):
         loc = " · ".join(p for p in [item.province, item.city] if p)
-        forms = "、".join(item.display_forms) if item.display_forms else ""
+        forms = "、".join(item.entry_channels) if item.entry_channels else ""
         scenarios = "、".join(item.suitable_scenarios) if item.suitable_scenarios else ""
         lines.append(
             f"{i}. [{item.id}] {_title_with_family(item)}\n"
@@ -1955,7 +1956,7 @@ def _items_to_llm_context(items, total: int) -> str:
             f"   简介：{item.summary[:200]}"
         )
         if forms:
-            lines.append(f"   展示形式：{forms}")
+            lines.append(f"   入口渠道：{forms}")
         if scenarios:
             lines.append(f"   适合场景：{scenarios}")
         # Include content snippet
@@ -1971,10 +1972,10 @@ def _items_to_title_context(items, total: int) -> str:
     lines = [f"第 1 轮候选标题共 {total} 项，以下为标题和基础元数据：\n"]
     for i, item in enumerate(items[:INITIAL_TITLE_CONTEXT_LIMIT], 1):
         loc = " · ".join(part for part in [item.province, item.city, item.district] if part)
-        forms = "、".join(item.display_forms[:4]) if item.display_forms else ""
+        forms = "、".join(item.entry_channels[:4]) if item.entry_channels else ""
         scenarios = "、".join(item.suitable_scenarios[:4]) if item.suitable_scenarios else ""
         meta = " | ".join(part for part in [item.category, item.level, loc] if part)
-        extra = "；".join(part for part in [f"展示：{forms}" if forms else "", f"场景：{scenarios}" if scenarios else ""] if part)
+        extra = "；".join(part for part in [f"入口渠道：{forms}" if forms else "", f"场景：{scenarios}" if scenarios else ""] if part)
         suffix = f" | {extra}" if extra else ""
         lines.append(f"{i}. [{item.id}] {_title_with_family(item)} | {meta}{suffix}")
     return "\n".join(lines)

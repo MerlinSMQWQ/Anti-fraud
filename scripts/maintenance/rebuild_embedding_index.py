@@ -18,7 +18,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from anti_fraud_explorer import config  # noqa: E402
-from anti_fraud_explorer.dataset import HeritageItem, load_dataset  # noqa: E402
+from anti_fraud_explorer.dataset import CaseItem, load_dataset  # noqa: E402
 from anti_fraud_explorer.embeddings import (  # noqa: E402
     EmbeddingClient,
     build_embedding_text,
@@ -30,8 +30,8 @@ from anti_fraud_explorer.embeddings import (  # noqa: E402
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Build or rebuild data/embeddings/heritage_embeddings.json. "
-            "Use --no-resume after data/processed/heritage_items.json changes."
+            "Build or rebuild data/embeddings/case_embeddings.json. "
+            "Use --no-resume after data/processed/case_items.json changes."
         )
     )
     parser.add_argument("--output", type=Path, default=config.EMBEDDING_INDEX_PATH)
@@ -105,11 +105,11 @@ def main() -> None:
 
 def run_round(
     args: argparse.Namespace,
-    batches: list[list[HeritageItem]],
+    batches: list[list[CaseItem]],
     indexed: dict[str, dict[str, Any]],
     payload: dict[str, Any],
-    items: list[HeritageItem],
-) -> list[list[HeritageItem]]:
+    items: list[CaseItem],
+) -> list[list[CaseItem]]:
     failed_batches = []
     with ThreadPoolExecutor(max_workers=max(args.workers, 1)) as executor:
         futures = {
@@ -173,7 +173,7 @@ def load_existing_payload(path: Path, kb) -> dict[str, Any]:
     return payload
 
 
-def embed_batch(batch: list[HeritageItem], request_timeout: float) -> list[dict[str, Any]]:
+def embed_batch(batch: list[CaseItem], request_timeout: float) -> list[dict[str, Any]]:
     client = EmbeddingClient(timeout=request_timeout, max_retries=0)
     texts = [build_embedding_text(item) for item in batch]
     vectors = client.embed_texts(texts)
@@ -185,7 +185,7 @@ def embed_batch(batch: list[HeritageItem], request_timeout: float) -> list[dict[
     return rows
 
 
-def chunked(items: list[HeritageItem], size: int):
+def chunked(items: list[CaseItem], size: int):
     for start in range(0, len(items), max(size, 1)):
         yield items[start : start + size]
 
@@ -195,7 +195,7 @@ def progress_text(done: int, total: int) -> str:
     return f"{done}/{total} ({percent:.1f}%)"
 
 
-def indexed_item_count(items: list[HeritageItem], indexed: dict[str, dict[str, Any]]) -> int:
+def indexed_item_count(items: list[CaseItem], indexed: dict[str, dict[str, Any]]) -> int:
     return len([item for item in items if item.id in indexed])
 
 

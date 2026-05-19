@@ -135,7 +135,7 @@ def _compact_item_payload(item: dict) -> dict:
         if value:
             compact[key] = value[:ITEM_TEXT_TRUNCATE]
 
-    for key in ("display_forms", "suitable_scenarios"):
+    for key in ("entry_channels", "suitable_scenarios"):
         value = item.get(key)
         if isinstance(value, (list, tuple)):
             compact[key] = [str(part) for part in value[:6] if str(part).strip()]

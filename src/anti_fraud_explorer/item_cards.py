@@ -14,7 +14,7 @@ def enriched_item_card(item: Any) -> dict[str, Any]:
     card["province"] = item.province
     card["city"] = item.city
     card["district"] = item.district
-    card["display_forms"] = list(item.display_forms)
+    card["entry_channels"] = list(item.entry_channels)
     return card
 
 

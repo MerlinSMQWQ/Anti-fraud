@@ -1,11 +1,3 @@
-export const humanVideos = {
-  idle: ["/static/media/wait1.mp4", "/static/media/wait2.mp4"],
-  thinking: ["/static/media/greet1.mp4"],
-  speaking: ["/static/media/speak1.mp4", "/static/media/speak2.mp4", "/static/media/speak3.mp4"],
-  farewell: ["/static/media/thanksandbye.mp4"],
-};
-export const humanVideoIndexes = {};
-
 export const suggestionQueryPool = [
   "刷单返利诈骗有什么常见套路？",
   "冒充电商物流客服诈骗有哪些风险信号？",

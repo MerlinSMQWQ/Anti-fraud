@@ -99,7 +99,7 @@ body::before {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(285px, 24.7vw) minmax(460px, 1fr) minmax(320px, 24vw);
+  grid-template-columns: minmax(285px, 23.5vw) minmax(460px, 1fr) minmax(320px, 24vw);
   gap: 8px;
   width: 100%;
   max-width: 100vw;

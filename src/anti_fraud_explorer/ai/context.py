@@ -1,11 +1,8 @@
-"""Context building and text extraction for the anti-fraud AI."""
+"""Context building and text extraction for the anti-fraud AI — v3 schema."""
 
 from __future__ import annotations
 
-import re
-
 from ..dataset import CaseItem, normalize_text
-from ..ai.prompts import get_structured_labels
 
 
 def build_context(sources: list[CaseItem], max_chars: int) -> str:
@@ -13,7 +10,7 @@ def build_context(sources: list[CaseItem], max_chars: int) -> str:
     remaining = max_chars
     for index, item in enumerate(sources, start=1):
         text = item_context_text(item)
-        chunk = f"[{index}] 标题：{item.title}\n类别：{item.category}\n资料：{text}"
+        chunk = f"[{index}] 标题：{item.title}\n类别：{item.ccl2023_category}\n资料：{text}"
         if len(chunk) > remaining:
             chunk = chunk[: max(0, remaining - 20)] + "..."
         chunks.append(chunk)
@@ -24,26 +21,48 @@ def build_context(sources: list[CaseItem], max_chars: int) -> str:
 
 
 def item_context_text(item: CaseItem) -> str:
+    """Build structured context from the LLM-normalized fields directly."""
     parts = []
-    for label in ("场景简述", "关键手法", "风险信号", "防范建议", "内容"):
-        value = extract_structured_field(item.content, label)
+    for label, value in [
+        ("场景简述", item.summary),
+        ("性质判断", item.nature_judgment),
+        ("判断理由", item.judgment_reason),
+        ("入口渠道", "；".join(item.entry_channels)),
+        ("冒充身份", item.impersonated_identity),
+        ("关键手法", "；".join(item.key_methods)),
+        ("目标资产", item.target_assets),
+        ("诈骗阶段", item.fraud_stage),
+        ("风险信号", item.risk_signals),
+        ("防范建议", item.prevention_advice),
+    ]:
         if value:
-            parts.append(f"{label}：{clean_knowledge_text(value)}")
+            parts.append(f"{label}：{normalize_text(value)}")
     if parts:
         return "\n".join(parts)
-    return clean_knowledge_text(item.summary or item.content)
+    return normalize_text(item.summary)
+
+
+def clean_knowledge_text(text: str) -> str:
+    return normalize_text(text)
 
 
 def extract_structured_field(text: str, label: str) -> str:
-    STRUCTURED_LABELS = get_structured_labels()
+    """Kept for backward compat — search text for a label: marker.
+    In v3 schema, use item fields directly instead."""
     text = normalize_text(text)
     marker = f"{label}:"
     start = text.find(marker)
     if start < 0:
         return ""
     start += len(marker)
+    # Find next label boundary
+    labels = [
+        "场景简述", "性质判断", "判断理由", "入口渠道", "冒充身份",
+        "关键手法", "目标资产", "诈骗阶段", "风险信号", "防范建议",
+        "来源名称", "采集日期",
+    ]
     end = len(text)
-    for next_label in STRUCTURED_LABELS:
+    for next_label in labels:
         if next_label == label:
             continue
         for next_marker in (f", {next_label}:", f"，{next_label}:"):
@@ -51,13 +70,3 @@ def extract_structured_field(text: str, label: str) -> str:
             if position >= 0:
                 end = min(end, position)
     return text[start:end].strip(" ，,")
-
-
-def clean_knowledge_text(text: str) -> str:
-    text = normalize_text(text)
-    text = re.sub(r"经纬度[:：]?\s*[-\d.,，\s]+", " ", text)
-    text = re.sub(r"电话[:：]?\s*[\d\- ]+", " ", text)
-    text = re.sub(r"序号[:：]?\s*\d+", " ", text)
-    text = re.sub(r"\boperation[:：]?\s*\S+", " ", text)
-    text = re.sub(r"\s+", " ", text).strip(" ，,")
-    return text

@@ -46,6 +46,14 @@ def create_app() -> Flask:
             response.headers["Pragma"] = "no-cache"
         return response
 
+    @app.get("/debug-template")
+    def debug_template():
+        import os as _os
+        full = _os.path.join(app.root_path, app.template_folder, "index.html")
+        with open(full, "r", encoding="utf-8") as _f:
+            lines = _f.readlines()
+        return jsonify({"root": app.root_path, "folder": app.template_folder, "full": full, "line15": lines[14].strip()[:80]})
+
     @app.get("/")
     def index():
         response = app.make_response(render_template("index.html"))
@@ -555,7 +563,7 @@ def _structured_item_score(item, scenario: str) -> int:
         score += 3
     elif item.level == "中":
         score += 2
-    score += min(len(item.display_forms), 3)
+    score += min(len(item.entry_channels), 3)
     return score
 
 
@@ -570,7 +578,7 @@ def _item_payload(item, include_content: bool = False) -> dict:
 
 
 def main() -> None:
-    create_app().run(host=settings.host, port=settings.port, debug=settings.debug)
+    create_app().run(host=settings.host, port=settings.port, debug=settings.debug, threaded=True)
 
 
 if __name__ == "__main__":
