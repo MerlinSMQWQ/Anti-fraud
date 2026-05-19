@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anti-fraud-agent"
+version = "0.1.0"
+description = "反诈案例智能体 — 面向反诈宣传、案例检索与科普提醒的本地 Web 智能体"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "Flask>=3.0,<4",
+    "httpx>=0.28,<1",
+    "zhipuai>=2.1,<3",
+    "sniffio>=1.3,<2",
+    "pypinyin>=0.51,<1",
+]
+
+[project.scripts]
+anti-fraud-agent = "anti_fraud_explorer.web:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
