@@ -1611,7 +1611,7 @@ mark.search-highlight {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   padding: 0;
   border: none;
@@ -1619,19 +1619,14 @@ mark.search-highlight {
   box-shadow: none;
 }
 
-.marginalia-filters:hover,
-.marginalia-filters:focus-within {
-  gap: 8px;
-}
-
 .filter-field {
   min-width: 0;
 }
 
 .filter-field select {
-  width: 96px;
-  min-width: 96px;
-  max-width: 96px;
+  width: 138px;
+  min-width: 138px;
+  max-width: 138px;
   min-height: 30px;
   padding: 4px 28px 4px 10px;
   border: 1px solid rgba(107, 144, 128, 0.26);
@@ -1658,20 +1653,10 @@ mark.search-highlight {
   background-size: 4px 4px, 4px 4px;
   background-repeat: no-repeat;
   transition:
-    min-width 140ms ease,
-    max-width 140ms ease,
-    width 140ms ease,
     border-color 140ms ease,
     background-color 140ms ease,
     color 140ms ease,
     box-shadow 140ms ease;
-}
-
-.marginalia-filters:hover .filter-field select,
-.marginalia-filters:focus-within .filter-field select {
-  width: 138px;
-  min-width: 138px;
-  max-width: 138px;
 }
 
 .filter-field select:focus {
@@ -2023,7 +2008,7 @@ mark.search-highlight {
   }
 
   .marginalia-filters {
-    gap: 6px;
+    gap: 8px;
   }
 
   .filter-field {
@@ -2031,13 +2016,6 @@ mark.search-highlight {
   }
 
   .filter-field select {
-    width: 88px;
-    min-width: 88px;
-    max-width: 88px;
-  }
-
-  .marginalia-filters:hover .filter-field select,
-  .marginalia-filters:focus-within .filter-field select {
     width: 118px;
     min-width: 118px;
     max-width: 118px;

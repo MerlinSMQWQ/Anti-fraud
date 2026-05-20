@@ -62,19 +62,20 @@ def search_items(
     """Search or browse cases.
 
     Empty query means browse mode:
-    - apply explicit filters such as category/risk_level
+    - apply explicit filters such as category/risk_level/entry_channel
     - return all matching items
     - do not run lexical ranking, pinyin fallback, or embedding retrieval
 
     Non-empty query means retrieval mode:
     - run lexical ranking
     - optionally run embedding fusion
-    - apply pinyin fallback
+    - apply pinyin fallback only when lexical title matching is weak
     """
-    query = normalize_text(query)
+    query = normalize_search_query(query)
     category = normalize_text(category)
     risk_level = normalize_text(risk_level)
     entry_channel = normalize_text(entry_channel)
+
     candidates: Iterable[CaseItem] = kb.items
 
     if category:
@@ -86,30 +87,37 @@ def search_items(
 
     candidates = list(candidates)
 
-    # Category/risk filters without a query should behave like browsing,
-    # not retrieval. Do not trigger lexical, pinyin, or embedding search.
+    # Browse/filter mode: clicking category/filter chips should not trigger
+    # lexical ranking, pinyin fallback, or embedding retrieval.
     if not query:
         result = sorted(candidates, key=lambda item: (item.ccl2023_category, item.title))
         return result[offset : offset + limit], len(result)
 
-    search_query = normalize_search_query(query)
-    tokens = tokenize(search_query)
-    lowered_query = search_query or query.lower()
-    ranked = rank_lexical(candidates, lowered_query, tokens)
+    tokens = tokenize(query)
+
+    # Keep lexical ranking separately. Even when hybrid is enabled, lexical score
+    # is still used to decide whether pinyin fallback is needed.
+    lexical_ranked = rank_lexical(candidates, query, tokens)
+    ranked = lexical_ranked
 
     using_hybrid = False
     if settings.search_use_embedding:
         try:
-            ranked = rank_hybrid(kb, candidates, lowered_query, tokens)
+            ranked = rank_hybrid(kb, candidates, query, tokens)
             using_hybrid = True
         except Exception:  # noqa: BLE001 - semantic retrieval should degrade to lexical search.
-            pass
+            ranked = lexical_ranked
 
     min_score = HYBRID_MIN_SCORE if using_hybrid else LEXICAL_MIN_SCORE
     result = [item for score, item in ranked if score >= min_score]
-    result = prepend_pinyin_matches(kb, result, search_query or query, candidates)
-    return result[offset : offset + limit], len(result)
 
+    # Pinyin is only a fallback. If lexical search already has a strong title
+    # substring match, do not let pinyin results jump ahead.
+    lexical_top_score = lexical_ranked[0][0] if lexical_ranked else 0
+    if len(query) >= _PINYIN_MIN_QUERY_LEN and lexical_top_score < TITLE_SUBSTRING_SCORE:
+        result = prepend_pinyin_matches(kb, result, query, candidates)
+
+    return result[offset : offset + limit], len(result)
 
 # ---------------------------------------------------------------------------
 # Query normalization
@@ -124,7 +132,6 @@ def normalize_search_query(query: str) -> str:
 
 
 def tokenize(query: str) -> list[str]:
-    query = normalize_search_query(query)
     if not query:
         return []
     tokens = re.findall(r"[\w\u4e00-\u9fff]+", query)
@@ -231,12 +238,7 @@ def prepend_pinyin_matches(
     query: str,
     candidates: list[CaseItem],
 ) -> list[CaseItem]:
-    """Place pinyin fallback matches ahead of weak lexical results when needed."""
-    if not query or len(query) < _PINYIN_MIN_QUERY_LEN:
-        return ranked_items
-    if has_title_substring_match(ranked_items, query):
-        return ranked_items
-
+    """Prepend deduplicated pinyin matches within the current candidate set."""
     candidate_ids = {item.id for item in candidates}
     pinyin_results = [
         item for item in search_items_pinyin(kb, query)
@@ -257,7 +259,7 @@ def search_items_pinyin(
     if not query or len(query) < _PINYIN_MIN_QUERY_LEN:
         return []
 
-    index = _build_pinyin_index(kb.generated_at or str(len(kb.items)))
+    index = _build_pinyin_index(_pinyin_index_rows(kb))
     if not index:
         return []
 
@@ -293,28 +295,38 @@ def search_items_pinyin(
 
 
 @lru_cache(maxsize=1)
-def _build_pinyin_index(kb_hash: str) -> dict[str, list[str]]:
+def _build_pinyin_index(rows: tuple[tuple[str, str, str], ...]) -> dict[str, list[str]]:
     """Build a title/category pinyin index for fuzzy Chinese retrieval fallback."""
     try:
         from pypinyin import lazy_pinyin  # noqa: PLC0415 - optional dependency
-        from ..domain.dataset import load_dataset
 
-        kb = load_dataset()
         index: dict[str, list[str]] = {}
-        for item in kb.items:
-            texts = [item.title]
-            if item.ccl2023_category:
-                texts.append(item.ccl2023_category)
+        for item_id, title, category in rows:
+            texts = [title]
+            if category:
+                texts.append(category)
             for text in texts:
                 py = "".join(lazy_pinyin(text))
                 py_compact = py.replace(" ", "")
                 if py_compact:
-                    index.setdefault(py_compact, []).append(item.id)
+                    index.setdefault(py_compact, []).append(item_id)
         LOGGER.info("Pinyin index built: %d entries", len(index))
         return index
     except ImportError:
         LOGGER.debug("pypinyin not installed, pinyin fuzzy search disabled")
         return {}
+
+
+def _pinyin_index_rows(kb: KnowledgeBase) -> tuple[tuple[str, str, str], ...]:
+    """Flatten the minimal item fields needed to build the cached pinyin index."""
+    return tuple(
+        (
+            item.id,
+            item.title,
+            item.ccl2023_category or "",
+        )
+        for item in kb.items
+    )
 
 
 def _is_substantial_pinyin_part(candidate_py: str, query_py: str) -> bool:
@@ -325,10 +337,6 @@ def _is_substantial_pinyin_part(candidate_py: str, query_py: str) -> bool:
         return False
     return len(candidate_py) >= len(query_py) * 0.45
 
-
-def has_title_substring_match(items: list[CaseItem], query: str) -> bool:
-    lowered_query = query.lower()
-    return any(item.title and item.title.lower() in lowered_query for item in items)
 
 
 # ---------------------------------------------------------------------------
