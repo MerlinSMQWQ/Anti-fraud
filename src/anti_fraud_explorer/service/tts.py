@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib import request
 
 from ..config import settings
+from ..text import normalize_text
 
 LOGGER = logging.getLogger(__name__)
 
@@ -79,6 +80,20 @@ def synthesize_speech_to_file(text: str) -> TTSAudio | None:
         return _openai_synthesize(text, path)
 
     return None
+
+
+def speech_audio_payload(text: str) -> dict[str, str]:
+    try:
+        audio = synthesize_speech_to_file(text)
+    except Exception:
+        return {"speech_engine": "browser"}
+    if audio is None:
+        return {"speech_engine": "browser"}
+    return {
+        "speech_audio_url": f"/api/tts/{audio.path.name}",
+        "speech_mime_type": audio.mime_type,
+        "speech_engine": audio.engine,
+    }
 
 
 def stream_speech_audio(text: str) -> Iterator[bytes] | None:
@@ -424,7 +439,7 @@ def _cache_key(text: str) -> str:
 
 
 def _clean_text(text: str) -> str:
-    return re.sub(r"\s+", " ", str(text or "")).strip()
+    return normalize_text(text)
 
 
 def _mime_type(encoding: str = "") -> str:

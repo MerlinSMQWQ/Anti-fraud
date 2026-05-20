@@ -1,7 +1,6 @@
 import { state, els } from './state.js';
 import { escapeHtml } from './markdown.js';
 
-let rightSearchTimer = 0;
 let rightSearchRequestKey = "";
 
 export function beginAskSessionRelated(requestId) {
@@ -39,10 +38,9 @@ export function itemTagList(item, limit = 4) {
   return tags;
 }
 
-export async function loadRightSearchResults(requestKey, category = "") {
+export async function loadRightSearchResults(requestKey) {
   const query = els.rightSearchInput?.value?.trim() || "";
   const params = new URLSearchParams({ q: query, limit: "1000" });
-  if (category) params.set("category", category);
   try {
     const data = await fetchJson(`/api/items?${params}`);
     if (requestKey !== rightSearchRequestKey) return;
@@ -54,24 +52,8 @@ export async function loadRightSearchResults(requestKey, category = "") {
   }
 }
 
-export function searchByCategory(category) {
-  // Clear search input
-  if (els.rightSearchInput) els.rightSearchInput.value = "";
-  // Highlight active chip
-  document.querySelectorAll(".marginalia-categories button").forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.category === category);
-  });
-  const requestKey = `cat:${category}`;
-  rightSearchRequestKey = requestKey;
-  els.relatedCount.textContent = "检索中";
-  els.relatedList.innerHTML = `<p class="marginalia-empty is-live">正在检索「${category}」</p>`;
-  loadRightSearchResults(requestKey, category);
-}
-
 export function searchRightPanel() {
   const query = els.rightSearchInput?.value?.trim() || "";
-  // Clear category active state
-  document.querySelectorAll(".marginalia-categories button").forEach((btn) => btn.classList.remove("is-active"));
   if (!query) {
     renderRelatedItems([]);
     return;
@@ -163,27 +145,5 @@ export function relatedPanelTitle() {
 export function updateRelatedPanelTitle() {
   if (els.relatedTitle) {
     els.relatedTitle.textContent = "案例检索";
-  }
-}
-
-export async function loadCategoryChips() {
-  if (!els.categoryChips) return;
-  try {
-    const meta = await fetchJson("/api/meta");
-    const categories = meta?.categories;
-    if (!Array.isArray(categories) || !categories.length) {
-      els.categoryChips.innerHTML = "";
-      return;
-    }
-    const top = [...categories]
-      .sort((a, b) => (b.item_count || 0) - (a.item_count || 0))
-      .slice(0, 10);
-    els.categoryChips.innerHTML = top
-      .map((category) => (
-        `<button type="button" data-category="${escapeHtml(category.name)}">${escapeHtml(category.name)}</button>`
-      ))
-      .join("");
-  } catch {
-    els.categoryChips.innerHTML = "";
   }
 }

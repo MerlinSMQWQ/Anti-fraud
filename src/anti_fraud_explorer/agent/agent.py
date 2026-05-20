@@ -7,7 +7,7 @@ from dataclasses import replace
 from typing import Any
 
 from ..config import settings
-from ..domain.dataset import KnowledgeBase, normalize_text
+from ..domain.dataset import KnowledgeBase
 from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
 from ..service.search import (
     LEXICAL_MIN_SCORE,
@@ -16,8 +16,9 @@ from ..service.search import (
     search_items,
     tokenize,
 )
-from ..service.retriever import _PROVINCE_PATTERN, _SHORT_PROVINCE_MAP
+from ..service.retriever import QueryAnalyzer
 from ..service.scenario_evidence import scenario_is_hard_match, scenario_match_score
+from ..text import normalize_text
 from ..prompts import SUBSEQUENT_TURN_SYSTEM_PROMPT, FRAUD_LABEL_MAP
 
 from .models import (
@@ -33,7 +34,6 @@ from .formatting import (
     items_to_llm_context,
     items_to_title_context,
 )
-from .rendering import render_template
 from .handlers import (
     handle_browse,
     handle_comparison,
@@ -65,6 +65,7 @@ class Agent:
     def __init__(self, kb: KnowledgeBase) -> None:
         self.kb = kb
         self.router = IntentRouter()
+        self.query_analyzer = QueryAnalyzer(kb)
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -321,7 +322,8 @@ class Agent:
     def _search_initial_candidates(
         self, query: str, category: str, context: dict | None = None,
     ) -> tuple[list[Any], int, str]:
-        search_query = normalize_search_query(query)
+        analysis = self.query_analyzer.analyze(query, context=context)
+        search_query = normalize_search_query(analysis.rewritten_query or query)
         lowered_query = search_query or normalize_text(query).lower()
         context_items = self._context_items(context or {})
         contextual_items = self._contextual_initial_candidates(context_items, category)
@@ -334,9 +336,9 @@ class Agent:
             item for item in self.kb.items
             if not category or item.ccl2023_category == category
         ]
-        structured_items = self._structured_initial_candidates(query, limit=INITIAL_TITLE_CANDIDATE_LIMIT)
+        structured_items = self._structured_initial_candidates(analysis, limit=INITIAL_TITLE_CANDIDATE_LIMIT)
         ranked = rank_lexical(candidates, lowered_query, tokenize(search_query))
-        scenario = self._query_scenario(query)
+        scenario = analysis.scenario
         lexical_items = [
             item for score, item in ranked
             if score >= LEXICAL_MIN_SCORE
@@ -408,8 +410,9 @@ class Agent:
             "是否承接上一轮由你根据对话历史判断。如果需要新增案例详情，请在 search_queries 中给出案例标题。"
         )
 
-    def _structured_initial_candidates(self, query: str, limit: int) -> list[Any]:
-        scenario = self._query_scenario(query)
+    def _structured_initial_candidates(self, analysis, limit: int) -> list[Any]:
+        query = analysis.original_query
+        scenario = analysis.scenario
         wants_recommendation = bool(re.search(r"推荐|适合|哪些|有哪些|找|筛选|展示|宣传|宣讲|班会|活动|互动|亲子", query))
         if not wants_recommendation or not scenario:
             return []
@@ -440,24 +443,6 @@ class Agent:
 
         scored.sort(key=lambda row: (-row[0], row[1]))
         return [item for _, _, item in scored[:limit]]
-
-    def _query_province(self, query: str) -> str:
-        return ""
-
-    def _query_scenario(self, query: str) -> str:
-        if "老年" in query or "老人" in query or "养老" in query:
-            return "老年防骗"
-        if "社区" in query or "居民" in query:
-            return "社区宣传"
-        if "校园" in query or "学校" in query or "学生" in query or "班会" in query or "课堂" in query:
-            return "校园宣讲"
-        if "企业" in query or "财务" in query or "老板" in query or "领导" in query:
-            return "企业培训"
-        if "短视频" in query or "海报" in query or "推文" in query or "口播" in query:
-            return "新媒体提醒"
-        if "案例" in query or "复盘" in query or "拆解" in query:
-            return "以案说法"
-        return ""
 
     def _search_subsequent_items(self, queries: list[str], category: str) -> tuple[list[Any], int]:
         items: list[Any] = []
@@ -783,7 +768,7 @@ def _fallback_task_type(query: str) -> TaskType:
         return TaskType.STUDY_TASK
     if re.search(r"策划|宣传角|宣传栏|方案|流程", text):
         return TaskType.LECTURE_PLAN
-    if re.search(r"改写|改成|口播|文案|双语|翻译|海报|短视频|提醒稿", text):
+    if re.search(r"改写|改成|口播|文案|海报|短视频|提醒稿", text):
         return TaskType.CONTENT_TRANSFORM
     return TaskType.FACT_QA
 

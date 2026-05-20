@@ -1,7 +1,6 @@
 """Unified HTTP client for all external API calls using httpx."""
 
 import logging
-import re
 import textwrap
 from functools import lru_cache
 from typing import Any
@@ -9,6 +8,7 @@ from typing import Any
 import httpx
 
 from ..config import settings
+from ..text import normalize_text
 
 LOGGER = logging.getLogger(__name__)
 
@@ -169,4 +169,4 @@ def _truncate_body(response: httpx.Response, max_chars: int = 200) -> str:
 
 
 def _normalize_str(value: str) -> str:
-    return re.sub(r"\s+", " ", value).strip()
+    return normalize_text(value)

@@ -9,7 +9,6 @@ let currentSpeechSegments = [];
 export let lastSpeechText = "";
 export let lastSpeechAudioUrl = "";
 let lastSpeechUsesServerTts = false;
-let lastSpeechLang = "zh-CN";
 let speechPlaybackSeq = 0;
 let speechUnlocked = false;
 let speechStartGuardTimer = 0;
@@ -44,7 +43,7 @@ export function setVoiceEnabled(enabled) {
   if (lastSpeechText) {
     setVoiceState("speaking");
     refreshVoiceToggleUI();
-    speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts, lang: lastSpeechLang });
+    speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts });
   } else {
     setVoiceState("idle");
     setVoiceStatus("");
@@ -64,21 +63,19 @@ export function replayLastSpeech() {
   if (!voiceEnabled) {
     voiceEnabled = true;
   }
-  return speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts, lang: lastSpeechLang });
+  return speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts });
 }
 
 export function cacheSpeechResult(text, audioUrl = "", options = {}) {
   lastSpeechText = speechText(text);
   lastSpeechAudioUrl = audioUrl || "";
   lastSpeechUsesServerTts = Boolean(options.serverTts || audioUrl);
-  lastSpeechLang = normalizeSpeechLang(options.lang || lastSpeechText);
 }
 
 export function clearSpeechCache() {
   lastSpeechText = "";
   lastSpeechAudioUrl = "";
   lastSpeechUsesServerTts = false;
-  lastSpeechLang = "zh-CN";
   pendingSpeechRewrite = false;
   visibilityInterruptedPlayback = false;
   visibilityInterruptedMode = "";
@@ -133,7 +130,7 @@ export function resumeSpeechAfterVisibility() {
     const playPromise = currentSpeechAudio.play();
     if (playPromise?.catch) {
       playPromise.catch(() => {
-        speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts, lang: lastSpeechLang });
+        speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts });
       });
     }
     return;
@@ -141,7 +138,7 @@ export function resumeSpeechAfterVisibility() {
   if (visibilityInterruptedPlayback && lastSpeechText) {
     visibilityInterruptedPlayback = false;
     visibilityInterruptedMode = "";
-    speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts, lang: lastSpeechLang });
+    speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts });
     return;
   }
   visibilityInterruptedPlayback = false;
@@ -184,7 +181,6 @@ export function speakAnswer(value, audioUrl = "", options = {}) {
   lastSpeechText = speechText(value);
   lastSpeechAudioUrl = audioUrl || "";
   lastSpeechUsesServerTts = Boolean(options.serverTts || audioUrl);
-  lastSpeechLang = normalizeSpeechLang(options.lang || lastSpeechText);
   if (!speechSupported || !lastSpeechText) {
     return false;
   }
@@ -412,16 +408,14 @@ export function playSpeechSegment(index, playbackSeq) {
   });
 }
 
-export function speechPlaybackSegments(text, lang = "zh-CN") {
+export function speechPlaybackSegments(text) {
   const source = String(text || "").trim();
   if (!source) return [];
-  const splitter = lang === "en-US"
-    ? /[^.!?;]+[.!?;]?/gu
-    : /[^。！？!?；;]+[。！？!?；;]?/gu;
+  const splitter = /[^。！？!?；;]+[。！？!?；;]?/gu;
   const pieces = source.match(splitter) || [source];
   const segments = [];
   let current = "";
-  const maxBytes = lang === "en-US" ? 320 : 720;
+  const maxBytes = 720;
   for (const piece of pieces) {
     const candidate = current + piece;
     if (current && utf8ByteLength(candidate) > maxBytes) {
@@ -469,19 +463,6 @@ export function speechText(value) {
     .replace(/\s+/g, " ")
     .trim();
   return text;
-}
-
-export function normalizeSpeechLang(value) {
-  const text = String(value || "").trim();
-  if (/^en(?:-[A-Z]{2})?$/i.test(text)) {
-    return "en-US";
-  }
-  const latinCount = (text.match(/[A-Za-z]/g) || []).length;
-  const chineseCount = (text.match(/[\u4e00-\u9fff]/g) || []).length;
-  if (latinCount >= 24 && latinCount > chineseCount * 2) {
-    return "en-US";
-  }
-  return "zh-CN";
 }
 
 export function stripSpeechDecorations(value) {

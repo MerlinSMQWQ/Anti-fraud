@@ -1,14 +1,4 @@
-{%- if transform_type == "翻译" %}
-以下是 {{ title }} 的基础双语展示稿。本地模板只做简版整理；配置 API Key 后可生成更完整的传播文案。
-
-| 中文 | English |
-| --- | --- |
-| **名称：**{{ title }}。 | **Name:** {{ title }}. |
-| **案例定位：**{{ title }} 属于{{ category }}{% if level %}，风险等级为{{ level }}{% endif %}。 | **Positioning:** {{ title }} is a {{ category }} case{% if level %} with a {{ level }} risk level{% endif %}. |
-| **简介：**{{ summary }} | **Introduction:** Configure an LLM API key to generate a polished English introduction. |
-| **关键手法：**{{ key_methods[:220] }}{% if key_methods|length > 220 %}......{% endif %} | **Key Tactics:** Configure an LLM API key to generate a matching English feature paragraph. |
-
-{%- elif transform_type in ("年轻化", "朋友圈") %}
+{%- if transform_type in ("年轻化", "朋友圈") %}
 ## {{ title }} . 轻松版提醒
 
 这类{{ category }}很容易伪装成日常消息{% if level %}，风险等级为{{ level }}{% endif %}。

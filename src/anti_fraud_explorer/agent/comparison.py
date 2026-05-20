@@ -4,9 +4,10 @@ import re
 from typing import Any
 
 from .models import AgentResult, TaskType
-from ..domain.dataset import KnowledgeBase, normalize_text
+from ..domain.dataset import KnowledgeBase
 from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
 from ..service.retriever import _PROVINCE_PATTERN, _SHORT_PROVINCE_MAP
+from ..text import normalize_text
 
 
 _COMPARISON_TARGET_TRAILING_RE = re.compile(

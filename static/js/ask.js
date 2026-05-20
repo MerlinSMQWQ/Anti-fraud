@@ -432,11 +432,10 @@ function applyAnswerSpeech(event) {
   if (!text) return;
 
   const speechAudioUrl = event?.speech_audio_url || "";
-  const speechAudioPending = Boolean(event?.speech_audio_pending);
-  const speechLang = event?.speech_lang || "";
+  const shouldRequestServerTts = !speechAudioUrl;
 
   console.info("[shizha:speech]", {
-    engine: event?.speech_engine || "browser",
+    engine: event?.speech_engine || (speechAudioUrl ? "file" : "server"),
     length: text.length,
     text,
   });
@@ -445,12 +444,12 @@ function applyAnswerSpeech(event) {
   setDigitalHumanState(lastSpeechHumanState, "正在回答", text);
 
   if (!voiceEnabled) {
-    cacheSpeechResult(text, speechAudioUrl, { serverTts: speechAudioPending, lang: speechLang });
+    cacheSpeechResult(text, speechAudioUrl, { serverTts: shouldRequestServerTts });
     scheduleHumanReturnToIdle(visualAnswerDuration(text));
     return;
   }
 
-  if (!speakAnswer(text, speechAudioUrl, { serverTts: speechAudioPending, lang: speechLang })) {
+  if (!speakAnswer(text, speechAudioUrl, { serverTts: shouldRequestServerTts })) {
     scheduleHumanReturnToIdle(visualAnswerDuration(text));
   }
 }
@@ -510,10 +509,8 @@ export async function askQuestion() {
       markSpeechRewritePending(false);
       applyAnswerSpeech({
         text: payload.speech,
-        speech_engine: payload?.speech_engine || "browser",
         speech_audio_url: payload?.speech_audio_url || "",
-        speech_audio_pending: Boolean(payload?.speech_audio_pending),
-        speech_lang: payload?.speech_lang || "",
+        speech_engine: payload?.speech_engine || "",
       });
     } else if (!speechArrived) {
       markSpeechRewritePending(false);

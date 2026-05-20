@@ -100,10 +100,10 @@ class Settings(BaseSettings):
         default="volc.service_type.10029", alias="VOLC_TTS_RESOURCE_ID"
     )
     volc_tts_voice_type: str = Field(
-        default="zh_female_gaolengyujie_emo_v2_mars_bigtts",
+        default="zh_male_tiancaitongsheng_mars_bigtts",
         alias="VOLC_TTS_VOICE_TYPE",
     )
-    volc_tts_emotion: str = Field(default="coldness", alias="VOLC_TTS_EMOTION")
+    volc_tts_emotion: str = Field(default="", alias="VOLC_TTS_EMOTION")
     volc_tts_emotion_scale: int = Field(default=4, alias="VOLC_TTS_EMOTION_SCALE")
     volc_tts_encoding: str = Field(default="mp3", alias="VOLC_TTS_ENCODING")
     volc_tts_rate: int = Field(default=24000, alias="VOLC_TTS_RATE")

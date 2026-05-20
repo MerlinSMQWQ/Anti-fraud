@@ -7,7 +7,7 @@
 - 案例检索：内置 86 条反诈案例，基于 `data/processed/case_items.json` 提供关键词、拼音和可选的向量检索
 - 智能问答：围绕案例库做依据式回答，不命中时会明确说明资料边界
 - 场景推荐：按校园、社区、企业、老年等宣讲场景筛选更合适的案例
-- 内容转化：生成讲解词、学习任务、展示方案、双语传播文案等
+- 内容转化：生成讲解词、学习任务、展示方案、提醒文案等
 - 语音播报：支持服务端 TTS 与浏览器语音回退
 
 ## 环境要求
@@ -67,7 +67,7 @@ cp .env.example .env
 
 - `data/processed/case_items.json`
 
-如果你需要从原始案例重新生成 v3 数据集，请运行：
+如果你需要从原始案例重新生成当前数据集，请运行：
 
 ```powershell
 python .\scripts\process_raw_data.py
@@ -113,7 +113,7 @@ python app.py
 
 ## 当前数据结构
 
-项目当前使用的是规范化后的 v3 案例结构，核心字段包括：
+项目当前使用的是规范化后的案例结构（`schema_version: 4`），核心字段包括：
 
 - `case_id`
 - `title`
@@ -122,6 +122,7 @@ python app.py
 - `custom_subcategory`
 - `risk_level`
 - `entry_channels`
+- `impersonated_identity`
 - `key_methods`
 - `risk_signals`
 - `prevention_advice`
@@ -131,6 +132,7 @@ python app.py
 说明：
 
 - 现在的数据模型直接匹配 `case_items.json`
+- 多值字段统一使用 JSON 数组，例如 `entry_channels`、`impersonated_identity`、`key_methods`、`tags`
 - 旧版兼容字段如 `family`、`level`、`history`、`province`、`city`、`district` 已移除
 - 地区字段不再作为结构化数据存储，相关检索逻辑会按当前 schema 处理
 

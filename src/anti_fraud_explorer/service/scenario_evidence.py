@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..domain.dataset import normalize_text
+from ..text import normalize_text
 
 
 SOFT_SCENARIO_SCORE = 2

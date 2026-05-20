@@ -4,12 +4,11 @@ All LLM-facing text, structured labels, speech transitions, content
 transform prompts, and admin filter words live in this module so domain
 vocabulary stays consistent and auditable across every caller.
 
-This module imports NO internal project modules — it is purely string
+This module imports NO internal project modules - it is purely string
 constants and compiled patterns, safe for use from any layer without
 circular dependency risks.
 """
 
-import re
 from typing import Final
 
 # ==========================================================================
@@ -100,39 +99,11 @@ SPOKEN_SYSTEM_PROMPT: Final[str] = (
     "只输出最终可播报文本，不要解释判断过程，不要写'无需修改'或'需要修改'，不要加'播报稿：'等前缀。"
 )
 
-
-
-
 # ==========================================================================
 # Content transformation prompts
 # ==========================================================================
 
 TRANSFORM_PROMPTS: Final[dict[str, str]] = {
-    "翻译": (
-        "你是一个反诈案例双语传播文案编辑。请基于以下反诈案例资料，输出中英双语 Markdown 表格。\n"
-        "\n"
-        "输出格式（每行必须是完整的表格行，用 | 开头 | 结尾，独占一行）：\n"
-        "一段 1-2 句中文导语。\n"
-        "\n"
-        "| 中文 | English |\n"
-        "| --- | --- |\n"
-        "| **名称：**规范中文名。 | **Name:** English name. |\n"
-        "| **案例定位：**用 1 句中文说明骗局类型、地区或风险等级。 | **Positioning:** Use one English sentence for fraud type, region, or risk level. |\n"
-        "| **简介：**用 2-3 句中文介绍诈骗入口、话术和核心风险。 | **Introduction:** Use 2-3 English sentences matching the Chinese paragraph. |\n"
-        "| **风险信号：**用 2-3 句中文概括关键诱导点、转账节点或异常行为。 | **Risk Signals:** Use 2-3 English sentences matching the Chinese paragraph. |\n"
-        "| **提醒文案：**用 1-2 句中文写适合展示牌或国际交流开场的防骗提醒。 | **Reminder Copy:** Use 1-2 English sentences matching the Chinese copy. |\n"
-        "\n"
-        "整理要求：\n"
-        "- 只能使用两列：左列标题必须是\u201c中文\u201d，右列标题必须是\u201cEnglish\u201d\n"
-        "- 阅读顺序必须是：同一行先读左侧中文段落，再读右侧英文段落；下一行再继续\n"
-        "- 禁止使用\u201c语言、名称、类别、简介、风险信号\u201d这种多列表格\n"
-        "- 禁止把所有中文放在一行、所有英文放在另一行\n"
-        "- 每个单元格都要是完整短段落，不要堆关键词\n"
-        "- 中英文内容要逐段对应，英文不是逐字硬翻，但信息点必须一致\n"
-        "- 不要直接照搬资料库里的冗长原文，要归纳后输出\n"
-        "- 名称：中文保持规范案例名；英文采用准确易懂的译名，必要时括号补拼音\n"
-        "- 如果原始资料存在噪声或表述重复，请主动清洗和归纳后再输出"
-    ),
     "年轻化": (
         "你是一个面向年轻受众的反诈科普写手。请将以下反诈案例用轻松、"
         "口语化的语言重新介绍，适合发在社交媒体上，保留关键信息但语气活泼。"
@@ -177,7 +148,6 @@ TRANSFORM_PROMPTS: Final[dict[str, str]] = {
 }
 
 TRANSFORM_MAX_TOKENS: Final[dict[str, int]] = {
-    "翻译": 2200,
     "年轻化": 1400,
     "朋友圈": 1200,
     "文创文案": 1800,
@@ -186,24 +156,6 @@ TRANSFORM_MAX_TOKENS: Final[dict[str, int]] = {
 }
 
 DEFAULT_TRANSFORM_TYPE: Final[str] = "改写"
-
-# ==========================================================================
-# Emoji pattern (shared by speech pipeline)
-# ==========================================================================
-
-_EMOJI_RE: Final[re.Pattern] = re.compile(
-    "["
-    "\U0001F1E6-\U0001F1FF"
-    "\U0001F300-\U0001FAFF"
-    "\u2600-\u27bf"
-    "\u200d"
-    "\ufe0f"
-    "]+"
-)
-
-
-def get_emoji_re() -> re.Pattern:
-    return _EMOJI_RE
 
 SUBSEQUENT_TURN_SYSTEM_PROMPT = (
     "你是识诈反诈助手。你能看到最近五轮对话历史，也能看到本轮服务器已经检索到的候选资料。\n"
@@ -258,20 +210,7 @@ SUBSEQUENT_TURN_SYSTEM_PROMPT = (
     "| A | 地区 | 特点 |\n"
     "| B | 地区 | 特点 |\n"
     "表格后可加一小段结论，多个案例分别占用独立数据行。\n"
-    "当用户要求中英双语、双语介绍、双语传播文案等内容转化时，仍然只输出外层 JSON，"
-    "但 answer 字符串里必须填写多行 Markdown 双列表格。"
-    "answer 格式：一段中文导语，然后空一行，然后表格；表格只能有两列，左列中文，右列 English。"
-    "每一行是一组对应段落，阅读顺序是先读这一行左侧中文，再读这一行右侧英文，然后进入下一行：\n"
-    "| 中文 | English |\n"
-    "| --- | --- |\n"
-    "| **名称：**规范中文名。 | **Name:** English name. |\n"
-    "| **案例定位：**中文类别、地区或风险等级说明。 | **Positioning:** Matching English sentence. |\n"
-    "| **简介：**2-3 句中文介绍诈骗入口、手法和核心风险。 | **Introduction:** 2-3 matching English sentences. |\n"
-    "| **风险信号：**2-3 句中文概括关键诈骗手法、诱导话术或识别要点。 | **Risk Signals:** 2-3 matching English sentences. |\n"
-    "| **提醒文案：**1-2 句中文防范提醒。 | **Reminder:** 1-2 matching English sentences. |\n"
-    "表格后不加结论文字。双语表格使用“中文 / English”两列，并让每一行成为一组中英对应段落。"
-    "所有表格行都独占一行，中文段落和英文段落在同一行左右对应。\n"
-    "输出前自检：recommendation 使用 `## 场景推荐` 和 `### 编号. 案例名` 分段；comparison 和 bilingual 表格使用真实换行；编号列表中 `1.`、`2.` 分别独占一行。\n"
+    "输出前自检：recommendation 使用 `## 场景推荐` 和 `### 编号. 案例名` 分段；comparison 表格使用真实换行；编号列表中 `1.`、`2.` 分别独占一行。\n"
     "依据资料库提供的事实回答；资料支撑不足时说明不确定点。"
     "如果没有可用资料且搜索预算已用尽，请明确说明资料不足，并给出可继续检索的方向。"
     "只输出 JSON，不要输出 Markdown 或解释文字。\n"

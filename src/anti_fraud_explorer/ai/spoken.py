@@ -3,8 +3,9 @@
 import logging
 import re
 
-from ..domain.dataset import CaseItem, normalize_text
-from ..prompts import get_emoji_re, SPOKEN_SYSTEM_PROMPT
+from ..domain.dataset import CaseItem
+from ..prompts import SPOKEN_SYSTEM_PROMPT
+from ..text import normalize_text, strip_emoji
 
 LOGGER = logging.getLogger(__name__)
 
@@ -83,6 +84,4 @@ def _clean_spoken_text(text: str, max_chars: int = 1800) -> str:
 
 
 def _remove_symbols(text: str) -> str:
-    _EMOJI_RE = get_emoji_re()
-    text = _EMOJI_RE.sub(" ", str(text or ""))
-    return re.sub(r"[ \t\f\v]+", " ", text).strip()
+    return strip_emoji(text)

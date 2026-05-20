@@ -6,7 +6,8 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from ..config import settings
-from ..domain.dataset import CaseItem, KnowledgeBase, normalize_text
+from ..domain.dataset import CaseItem, KnowledgeBase
+from ..text import normalize_text
 
 
 LOGGER = logging.getLogger(__name__)
@@ -22,35 +23,6 @@ HYBRID_MIN_SCORE = 0.015  # RRF-based scores are small; this keeps weak tail mat
 _PINYIN_MIN_QUERY_LEN = 2  # minimum query chars to try pinyin matching
 _PINYIN_MATCH_BONUS = 0.3  # score for pinyin-exact match
 _SEARCH_TRAILING_PUNCTUATION = "？?！!。.，,、 \t\r\n"
-_SEARCH_QUERY_FILLERS = (
-    "是什么",
-    "是啥",
-    "有哪些",
-    "有那些",
-    "有什么",
-    "有啥",
-    "整理提醒稿",
-    "整理口播稿",
-    "改成口播稿",
-    "改成提醒文案",
-    "提醒稿",
-    "口播稿",
-    "提醒文案",
-    "宣讲稿",
-    "写一段",
-    "写一个",
-    "整理",
-    "给",
-    "请问",
-    "请介绍一下",
-    "请介绍",
-    "介绍一下",
-    "介绍",
-    "讲讲",
-    "说说",
-    "帮我看看",
-    "我想知道",
-)
 
 
 @lru_cache(maxsize=1)
@@ -158,15 +130,11 @@ def tokenize(query: str) -> list[str]:
 
 
 def normalize_search_query(query: str) -> str:
-    """Reduce natural-language questions to the searchable subject terms."""
+    """Normalize a raw search string without trying to interpret user intent."""
     text = normalize_text(query).lower().strip(_SEARCH_TRAILING_PUNCTUATION)
     if not text:
         return ""
-
-    for filler in _SEARCH_QUERY_FILLERS:
-        text = text.replace(filler, " ")
-    text = re.sub(r"\s+", " ", text).strip(_SEARCH_TRAILING_PUNCTUATION)
-    return text or normalize_text(query).lower().strip(_SEARCH_TRAILING_PUNCTUATION)
+    return re.sub(r"\s+", " ", text).strip(_SEARCH_TRAILING_PUNCTUATION)
 
 
 def search_items(

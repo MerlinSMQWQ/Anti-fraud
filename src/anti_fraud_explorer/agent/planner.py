@@ -5,7 +5,8 @@ from typing import Any
 
 from ..config import settings
 from .models import AgentDecision, TaskType, task_type_from_str
-from ..domain.dataset import KnowledgeBase, normalize_text
+from ..domain.dataset import KnowledgeBase
+from ..text import normalize_text
 
 
 def call_agent_planner_model(
@@ -88,7 +89,7 @@ def build_agent_planner_messages(
                 'lecture_plan, study_task, content_transform。'
                 '可选动作：direct_answer（身份/能力/寒暄/越界说明）、retrieval_tool（查资料库）、'
                 'rule_handler（筛选/对比/推荐/策划/教案）、llm_generation（基于检索资料生成）。'
-                '任务边界：content_transform 用于把一个或多个反诈案例改写成口播稿、提醒文案、双语文案、'
+                '任务边界：content_transform 用于把一个或多个反诈案例改写成口播稿、提醒文案、'
                 '海报文案、短视频脚本、年轻化版本等成稿内容；'
                 'study_task 用于班会、课程、学习单、课堂活动、互动提问等教学设计；'
                 'lecture_plan 用于社区宣传角、校园宣传栏、反诈讲座流程、专题宣传方案等展示方案。'

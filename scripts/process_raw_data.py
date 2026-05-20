@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,7 +29,7 @@ from openai import OpenAI
 SYSTEM_PROMPT = """你是反诈案例数据标注专家。你的任务是根据提供的原始信息，生成一份完全符合《反诈智能体数据采集与标注规范》的 JSON 案例记录。
 
 ## 字段要求
-你必须输出一个 JSON 对象，包含以下所有字段。对于多选字段，请使用中文分号`；`分隔（例如：`电话；短信`）。日期格式统一为`YYYY-MM-DD`。
+你必须输出一个 JSON 对象，包含以下所有字段。对于多选字段，请输出 JSON 字符串数组（例如：`["电话", "短信"]`）。日期格式统一为`YYYY-MM-DD`。
 
 ### 必填字段
 | 字段名 | 类型 | 说明 | 要求 |
@@ -60,12 +61,12 @@ SYSTEM_PROMPT = """你是反诈案例数据标注专家。你的任务是根据�
 | official_category | 多选枚举 | 官方宣传参考类别（2025版手册） |
 | ccl2023_category | 单选/多选 | CCL2023 参考类别 |
 | custom_subcategory | 文本 | 自定义细分类 |
-| tags | 多标签文本 | 标签，分号分隔 |
+| tags | 多标签文本 | 标签，使用字符串数组 |
 | involved_platforms | 文本/多选 | 涉及平台 |
 | victim_group | 文本/枚举 | 受害群体 |
 | emergency_plan_id | 文本 | 应急方案编号 |
-| law_basis_ids | 文本 | 法规依据编号，分号分隔 |
-| source_links | 文本 | 来源链接，分号分隔 |
+| law_basis_ids | 文本 | 法规依据编号，使用字符串数组 |
+| source_links | 文本 | 来源链接，使用字符串数组 |
 | publish_date | 日期 | 发布日期 |
 | remark | 长文本 | 备注 |
 
@@ -87,7 +88,7 @@ SYSTEM_PROMPT = """你是反诈案例数据标注专家。你的任务是根据�
 
 ## 处理原则
 1. 如果原始信息中缺少某个必填字段，请尝试根据已有信息合理推断，但务必在备注中标明"推断"。
-2. 所有多值字段必须使用中文分号`；`分隔。
+2. 所有多值字段必须输出为 JSON 字符串数组，不能使用中文分号`；`拼接成一个字符串。
 3. 日期格式严格为 YYYY-MM-DD，如无法确定具体日期，填写年份即可，如"2026"。
 4. 防范建议应具体可执行，不写空泛口号。
 5. 输出必须是纯 JSON 对象，不要包含 Markdown 代码块标记。
@@ -114,6 +115,21 @@ REQUIRED_FIELDS = [
     "source_type", "collection_date", "is_desensitized",
 ]
 
+MULTIVALUE_FIELDS = {
+    "entry_channels",
+    "impersonated_identity",
+    "false_belief",
+    "key_methods",
+    "target_assets",
+    "fraud_stage",
+    "loss_type",
+    "official_category",
+    "tags",
+    "involved_platforms",
+    "law_basis_ids",
+    "source_links",
+}
+
 # ---------------------------------------------------------------------------
 # Enum fields and their allowed values (for basic validation)
 # ---------------------------------------------------------------------------
@@ -129,6 +145,8 @@ ENUM_FIELDS = {
     "is_desensitized": {"是", "否", "不涉及", "待处理"},
 }
 
+_MULTIVALUE_SPLIT_RE = re.compile(r"[；;]\s*")
+
 
 def get_client() -> OpenAI:
     """Create an OpenAI-compatible client using environment variables."""
@@ -139,10 +157,43 @@ def get_client() -> OpenAI:
     return OpenAI(api_key=api_key, base_url=base_url)
 
 
+def normalize_multivalue(value: Any) -> list[str]:
+    """Convert multi-value fields to normalized string lists."""
+    if isinstance(value, (list, tuple)):
+        result: list[str] = []
+        for item in value:
+            result.extend(normalize_multivalue(item))
+        return result
+
+    text = str(value or "").strip()
+    if not text:
+        return []
+
+    parts = [part.strip() for part in _MULTIVALUE_SPLIT_RE.split(text)]
+    return [part for part in parts if part]
+
+
+def normalize_case_shape(case: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the LLM output into the dataset shape expected by the app."""
+    normalized = dict(case)
+    for field in MULTIVALUE_FIELDS:
+        normalized[field] = normalize_multivalue(normalized.get(field))
+    return normalized
+
+
 def validate_case(case: dict[str, Any]) -> bool:
     """Check that all required fields are present and enums match."""
     for field in REQUIRED_FIELDS:
-        if field not in case or not str(case[field]).strip():
+        if field not in case:
+            LOG.warning("Missing required field: %s", field)
+            return False
+        value = case[field]
+        if field in MULTIVALUE_FIELDS:
+            if not isinstance(value, list) or not value:
+                LOG.warning("Required multi-value field is empty or not a list: %s", field)
+                return False
+            continue
+        if not str(value).strip():
             LOG.warning("Missing required field: %s", field)
             return False
     for field, allowed in ENUM_FIELDS.items():
@@ -174,6 +225,7 @@ def normalize_case_with_llm(
                 temperature=TEMPERATURE,
             )
             result = json.loads(response.choices[0].message.content)
+            result = normalize_case_shape(result)
             # Ensure case_id is present
             if "case_id" not in result or not result["case_id"]:
                 result["case_id"] = f"FZ-LLM-{case_index:04d}"
@@ -231,9 +283,8 @@ def process_raw_data(
     category_counter: dict[str, int] = {}
     for case in processed:
         cat = case.get("ccl2023_category") or case.get("official_category", "未分类")
-        # ccl2023_category may be multi-value; take the first one
-        if isinstance(cat, str) and "；" in cat:
-            cat = cat.split("；")[0]
+        if isinstance(cat, list):
+            cat = next((part for part in cat if str(part).strip()), "未分类")
         category_counter[cat] = category_counter.get(cat, 0) + 1
 
     categories = sorted(category_counter.items(), key=lambda x: -x[1])
@@ -243,7 +294,7 @@ def process_raw_data(
     ]
 
     dataset = {
-        "schema_version": 3,
+        "schema_version": 4,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": {
             "project": "anti_fraud_cases",

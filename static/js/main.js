@@ -3,7 +3,7 @@ import { speechSupported } from './consts.js';
 import { initHuman } from './human.js';
 import { stopSpeech, unlockSpeech, setVoiceStatus, voiceState, replayLastSpeech, hasReplayableSpeech, pauseSpeechForVisibility, resumeSpeechAfterVisibility } from './speech.js';
 import { renderQuerySuggestions, loadMeta, resizeQuestionInput, syncRestoredQuestion, handleQuestionInput } from './ui.js';
-import { renderRelatedItems, updateRelatedPanelTitle, searchRightPanel, searchByCategory, showDetail, hideDetail, loadCategoryChips } from './search.js';
+import { renderRelatedItems, updateRelatedPanelTitle, searchRightPanel, showDetail, hideDetail } from './search.js';
 import { askQuestion } from './ask.js';
 
 function init() {
@@ -26,7 +26,6 @@ function init() {
     digitalHumanSpeech: document.querySelector("#digitalHumanSpeech"),
     rightSearchInput: document.querySelector("#rightSearchInput"),
     rightSearchButton: document.querySelector("#rightSearchButton"),
-    categoryChips: document.querySelector("#categoryChips"),
     searchMode: document.querySelector("#searchMode"),
     detailMode: document.querySelector("#detailMode"),
     backToSearch: document.querySelector("#backToSearch"),
@@ -44,7 +43,6 @@ function init() {
   renderQuerySuggestions();
   loadMeta();
   updateRelatedPanelTitle();
-  loadCategoryChips();
   syncRestoredQuestion();
 
   // Event listeners
@@ -60,13 +58,6 @@ function init() {
   els.rightSearchButton?.addEventListener("click", searchRightPanel);
   els.rightSearchInput?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") searchRightPanel();
-  });
-
-  // Category chips
-  els.categoryChips?.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-category]");
-    if (!button) return;
-    searchByCategory(button.dataset.category || "");
   });
 
   // Detail back button

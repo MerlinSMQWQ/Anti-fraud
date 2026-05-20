@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..config import settings
-from ..domain.dataset import CaseItem, KnowledgeBase, item_to_dict, normalize_text
+from ..domain.dataset import CaseItem, KnowledgeBase, item_to_dict
 from ..service.search import normalize_search_query, search_items
+from ..text import normalize_text
 
 
 LOGGER = logging.getLogger(__name__)

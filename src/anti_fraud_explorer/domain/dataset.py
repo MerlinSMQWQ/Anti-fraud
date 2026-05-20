@@ -1,17 +1,13 @@
-"""Dataset loading and normalized in-memory access for the v3 case schema."""
+"""Dataset loading and normalized in-memory access for the current case schema."""
 
 import json
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from ..config import settings
-
-
-def normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", value.replace("\u00a0", " ")).strip()
+from ..text import normalize_text
 
 
 @dataclass(frozen=True)
@@ -19,20 +15,6 @@ class Category:
     id: int
     name: str
     item_count: int
-
-
-def _parse_multivalue(value: Any) -> tuple[str, ...]:
-    """Parse a string like '电话；短信' or a list into a normalized tuple."""
-    if isinstance(value, (list, tuple)):
-        return tuple(part for item in value if (part := normalize_text(str(item))))
-    if isinstance(value, str) and value.strip():
-        return tuple(part for raw in value.split("；") if (part := normalize_text(raw)))
-    return ()
-
-
-def _parse_text(value: Any) -> str:
-    return normalize_text(str(value)) if value else ""
-
 
 @dataclass(frozen=True)
 class CaseItem:
@@ -44,7 +26,7 @@ class CaseItem:
     nature_judgment: str
     judgment_reason: str
     entry_channels: tuple[str, ...]
-    impersonated_identity: str
+    impersonated_identity: tuple[str, ...]
     false_belief: tuple[str, ...]
     key_methods: tuple[str, ...]
     target_assets: tuple[str, ...]
@@ -94,6 +76,8 @@ class CaseItem:
             parts.extend(self.key_methods)
         if self.entry_channels:
             parts.extend(self.entry_channels)
+        if self.impersonated_identity:
+            parts.extend(self.impersonated_identity)
         if self.official_category:
             parts.extend(self.official_category)
         if self.victim_group:
@@ -103,6 +87,15 @@ class CaseItem:
 
 class KnowledgeBase:
     def __init__(self, payload: dict[str, Any]):
+        def text_field(item: dict[str, Any], key: str) -> str:
+            return normalize_text(str(item.get(key) or ""))
+
+        def multivalue_field(item: dict[str, Any], key: str) -> tuple[str, ...]:
+            value = item.get(key) or []
+            if not isinstance(value, list):
+                raise TypeError(f"{key} must be a list in case_items.json")
+            return tuple(part for raw in value if (part := normalize_text(str(raw))))
+
         self.schema_version = payload.get("schema_version", 1)
         self.generated_at = payload.get("generated_at", "")
         self.source = payload.get("source", {})
@@ -116,37 +109,37 @@ class KnowledgeBase:
         ]
         self.items = [
             CaseItem(
-                id=_parse_text(item.get("case_id") or item.get("id")),
-                title=_parse_text(item.get("title")),
-                summary=_parse_text(item.get("summary")),
-                nature_judgment=_parse_text(item.get("nature_judgment")),
-                judgment_reason=_parse_text(item.get("judgment_reason")),
-                entry_channels=_parse_multivalue(item.get("entry_channels")),
-                impersonated_identity=_parse_text(item.get("impersonated_identity")),
-                false_belief=_parse_multivalue(item.get("false_belief")),
-                key_methods=_parse_multivalue(item.get("key_methods")),
-                target_assets=_parse_multivalue(item.get("target_assets")),
-                fraud_stage=_parse_multivalue(item.get("fraud_stage")),
-                risk_signals=_parse_text(item.get("risk_signals")),
-                risk_level=_parse_text(item.get("risk_level")),
-                loss_occurred=_parse_text(item.get("loss_occurred")),
-                loss_type=_parse_multivalue(item.get("loss_type")),
-                prevention_advice=_parse_text(item.get("prevention_advice")),
-                source_name=_parse_text(item.get("source_name")),
-                source_type=_parse_text(item.get("source_type")),
-                collection_date=_parse_text(item.get("collection_date")),
-                is_desensitized=_parse_text(item.get("is_desensitized")),
-                official_category=_parse_multivalue(item.get("official_category")),
-                ccl2023_category=_parse_text(item.get("ccl2023_category")),
-                custom_subcategory=_parse_text(item.get("custom_subcategory")),
-                tags=_parse_multivalue(item.get("tags")),
-                involved_platforms=_parse_multivalue(item.get("involved_platforms")),
-                victim_group=_parse_text(item.get("victim_group")),
-                emergency_plan_id=_parse_text(item.get("emergency_plan_id")),
-                law_basis_ids=_parse_multivalue(item.get("law_basis_ids")),
-                source_links=_parse_multivalue(item.get("source_links")),
-                publish_date=_parse_text(item.get("publish_date")),
-                remark=_parse_text(item.get("remark")),
+                id=normalize_text(str(item.get("case_id") or item.get("id") or "")),
+                title=text_field(item, "title"),
+                summary=text_field(item, "summary"),
+                nature_judgment=text_field(item, "nature_judgment"),
+                judgment_reason=text_field(item, "judgment_reason"),
+                entry_channels=multivalue_field(item, "entry_channels"),
+                impersonated_identity=multivalue_field(item, "impersonated_identity"),
+                false_belief=multivalue_field(item, "false_belief"),
+                key_methods=multivalue_field(item, "key_methods"),
+                target_assets=multivalue_field(item, "target_assets"),
+                fraud_stage=multivalue_field(item, "fraud_stage"),
+                risk_signals=text_field(item, "risk_signals"),
+                risk_level=text_field(item, "risk_level"),
+                loss_occurred=text_field(item, "loss_occurred"),
+                loss_type=multivalue_field(item, "loss_type"),
+                prevention_advice=text_field(item, "prevention_advice"),
+                source_name=text_field(item, "source_name"),
+                source_type=text_field(item, "source_type"),
+                collection_date=text_field(item, "collection_date"),
+                is_desensitized=text_field(item, "is_desensitized"),
+                official_category=multivalue_field(item, "official_category"),
+                ccl2023_category=text_field(item, "ccl2023_category"),
+                custom_subcategory=text_field(item, "custom_subcategory"),
+                tags=multivalue_field(item, "tags"),
+                involved_platforms=multivalue_field(item, "involved_platforms"),
+                victim_group=text_field(item, "victim_group"),
+                emergency_plan_id=text_field(item, "emergency_plan_id"),
+                law_basis_ids=multivalue_field(item, "law_basis_ids"),
+                source_links=multivalue_field(item, "source_links"),
+                publish_date=text_field(item, "publish_date"),
+                remark=text_field(item, "remark"),
             )
             for item in payload.get("items", [])
         ]
@@ -179,7 +172,7 @@ def item_to_dict(item: CaseItem, include_content: bool = False) -> dict[str, Any
         "nature_judgment": item.nature_judgment,
         "judgment_reason": item.judgment_reason,
         "entry_channels": list(item.entry_channels),
-        "impersonated_identity": item.impersonated_identity,
+        "impersonated_identity": list(item.impersonated_identity),
         "false_belief": list(item.false_belief),
         "key_methods": list(item.key_methods),
         "target_assets": list(item.target_assets),

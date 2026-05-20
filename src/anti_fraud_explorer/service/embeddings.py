@@ -14,7 +14,8 @@ from typing import Any
 import httpx
 
 from ..config import settings
-from ..domain.dataset import CaseItem, KnowledgeBase, normalize_text
+from ..domain.dataset import CaseItem, KnowledgeBase
+from ..text import normalize_text
 
 
 class EmbeddingUnavailable(RuntimeError):

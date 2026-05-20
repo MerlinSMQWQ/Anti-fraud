@@ -1,6 +1,7 @@
 """Context building and text extraction for the anti-fraud AI — v3 schema."""
 
-from ..domain.dataset import CaseItem, normalize_text
+from ..domain.dataset import CaseItem
+from ..text import normalize_text
 
 
 def build_context(sources: list[CaseItem], max_chars: int) -> str:
@@ -26,10 +27,10 @@ def item_context_text(item: CaseItem) -> str:
         ("性质判断", item.nature_judgment),
         ("判断理由", item.judgment_reason),
         ("入口渠道", "；".join(item.entry_channels)),
-        ("冒充身份", item.impersonated_identity),
+        ("冒充身份", "；".join(item.impersonated_identity)),
         ("关键手法", "；".join(item.key_methods)),
-        ("目标资产", item.target_assets),
-        ("诈骗阶段", item.fraud_stage),
+        ("目标资产", "；".join(item.target_assets)),
+        ("诈骗阶段", "；".join(item.fraud_stage)),
         ("风险信号", item.risk_signals),
         ("防范建议", item.prevention_advice),
     ]:

@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from ..domain.dataset import normalize_text
 from ..prompts import FRAUD_LABEL_MAP
+from ..text import normalize_text
 
 
 def format_context_item_for_llm(item: Any) -> str:

@@ -7,10 +7,11 @@ from typing import Any
 
 from ..config import settings
 from .models import TaskType, AgentResult
-from ..domain.dataset import KnowledgeBase, normalize_text
+from ..domain.dataset import KnowledgeBase
 from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
 from ..service.scenario_evidence import scenario_match_score, scenario_is_hard_match
 from ..prompts import DEFAULT_TRANSFORM_TYPE, TRANSFORM_MAX_TOKENS, TRANSFORM_PROMPTS
+from ..text import normalize_text
 from .formatting import (
     candidate_summaries_for_llm,
     context_title_keywords,
@@ -120,7 +121,7 @@ def handle_study_task(agent: Agent, analysis) -> AgentResult:
 
 
 def handle_content_transform(agent: Agent, analysis) -> AgentResult:
-    """CONTENT_TRANSFORM: translate / rewrite / creative brief."""
+    """CONTENT_TRANSFORM: rewrite / spoken script / creative brief."""
     from ..service.search import search_items
     from ..ai import Answer, answer_question
 
@@ -150,9 +151,7 @@ def handle_content_transform(agent: Agent, analysis) -> AgentResult:
     transform_type = analysis.transform_type
     if not transform_type:
         q = analysis.original_query
-        if re.search(r"翻译|英文|英语|双语|translate", q):
-            transform_type = "翻译"
-        elif re.search(r"讲解词|讲解稿|口播稿|解说词", q):
+        if re.search(r"讲解词|讲解稿|口播稿|解说词", q):
             transform_type = "讲解词"
         elif re.search(r"年轻化|朋友圈|口语化|轻松", q):
             transform_type = "年轻化"
@@ -196,16 +195,6 @@ def handle_content_transform(agent: Agent, analysis) -> AgentResult:
             )
         except Exception:
             pass  # fall through to local
-
-    if transform_type == "翻译":
-        return AgentResult(
-            task_type=TaskType.CONTENT_TRANSFORM,
-            answer="双语翻译需要配置 API Key。请在环境变量中设置 AI_API_KEY 后重试。",
-            items=[_enriched_item_card(target_item)],
-            sources=[_source_payload(target_item)],
-            mode="unavailable",
-            confidence=0.0,
-        )
 
     local_answer = build_transform_local(transform_type, target_item)
     return AgentResult(
