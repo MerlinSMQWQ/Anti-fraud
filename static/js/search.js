@@ -22,10 +22,8 @@ export function itemTitle(item) {
 
 export function itemMetaParts(item, opts = {}) {
   const parts = [];
-  const location = [item?.province, item?.city, item?.district].filter(Boolean).join(" · ");
-  if (location) parts.push(location);
-  const fields = [item?.category];
-  if (!opts.skipLevel) fields.push(item?.level);
+  const fields = [item?.ccl2023_category, item?.custom_subcategory];
+  if (!opts.skipLevel) fields.push(item?.risk_level);
   for (const value of fields) {
     if (value && !parts.includes(value)) parts.push(value);
   }
@@ -34,8 +32,8 @@ export function itemMetaParts(item, opts = {}) {
 
 export function itemTagList(item, limit = 4) {
   const tags = [];
-  for (const form of item?.display_forms || []) {
-    if (form && !tags.includes(form)) tags.push(form);
+  for (const value of [...(item?.tags || []), ...(item?.entry_channels || [])]) {
+    if (value && !tags.includes(value)) tags.push(value);
     if (tags.length >= limit) break;
   }
   return tags;
@@ -149,7 +147,7 @@ export function itemButtonHtml(item) {
   const tags = itemTagList(item, 4);
   const title = itemTitle(item);
   return `
-    <div class="item-entry" data-id="${escapeHtml(item.id)}" data-category="${escapeHtml(item.category)}">
+    <div class="item-entry" data-id="${escapeHtml(item.id)}" data-category="${escapeHtml(item.ccl2023_category || "")}">
       <div class="item-entry-head">
         <div class="item-entry-title">${escapeHtml(title)}</div>
       </div>
@@ -163,7 +161,7 @@ export function itemButtonHtml(item) {
 export async function showDetail(id) {
   try {
     const item = await fetchJson(`/api/items/${encodeURIComponent(id)}`);
-    els.detailCategory.textContent = item.category;
+    els.detailCategory.textContent = item.ccl2023_category || "";
     els.detailTitle.textContent = itemTitle(item);
     els.detailMeta.innerHTML = detailMetaHtml(item);
     const support = detailSupportText(item);
@@ -189,17 +187,18 @@ export function hideDetail() {
 
 function detailMetaHtml(item) {
   const parts = [];
-  const location = [item?.province, item?.city, item?.district].filter(Boolean).join(" · ");
-  if (location) parts.push(location);
-  for (const value of [item?.category, item?.level]) {
+  for (const value of [item?.ccl2023_category, item?.custom_subcategory, item?.risk_level]) {
     if (value && !parts.includes(value)) parts.push(value);
   }
   return parts.map((p) => `<span>${escapeHtml(p)}</span>`).join("");
 }
 
 function detailSupportText(item) {
-  if (item?.suitable_scenarios?.length) {
-    return `适用场景：${item.suitable_scenarios.slice(0, 3).join("、")}`;
+  if (item?.victim_group) {
+    return `受害群体：${item.victim_group}`;
+  }
+  if (item?.source_name) {
+    return `来源：${item.source_name}`;
   }
   return "";
 }

@@ -9,7 +9,7 @@ from typing import Any
 
 from ..config import settings
 from .models import TaskType, AgentResult
-from ..domain.dataset import get_ai_fields, KnowledgeBase, normalize_text
+from ..domain.dataset import KnowledgeBase, normalize_text
 from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
 from ..service.scenario_evidence import scenario_match_score, scenario_is_hard_match
 from ..prompts import DEFAULT_TRANSFORM_TYPE, TRANSFORM_MAX_TOKENS, TRANSFORM_PROMPTS
@@ -79,14 +79,13 @@ def handle_study_task(agent: Agent, analysis) -> AgentResult:
         audience_label = "中小学生"
 
     title = _title_with_family(target_item)
-    category = target_item.category
+    category = target_item.ccl2023_category
     summary = target_item.summary[:200]
 
-    ai = get_ai_fields(target_item.id)
-    features = ai.get("key_methods", "")[:200] or summary
-    history = ai.get("history", "")[:200] or ""
+    features = "；".join(target_item.key_methods)[:200] or summary
+    history = target_item.source_name[:200] or ""
     display = "、".join(target_item.entry_channels) if target_item.entry_channels else "展板 + 讲解"
-    prevention_advice = ai.get("prevention_advice", "")[:200] or ""
+    prevention_advice = target_item.prevention_advice[:200] or ""
 
     answer = render_template(
         "study_task.md.j2",
@@ -164,25 +163,20 @@ def handle_content_transform(agent: Agent, analysis) -> AgentResult:
         else:
             transform_type = "改写"
 
-    ai = get_ai_fields(target_item.id)
     context_lines = [
         f"标题：{target_item.title}",
-        f"类别：{target_item.category}",
+        f"类别：{target_item.ccl2023_category}",
     ]
-    if target_item.province:
-        context_lines.append(f"省份：{target_item.province}")
-    if target_item.city:
-        context_lines.append(f"城市：{target_item.city}")
-    if target_item.level:
-        context_lines.append(f"级别：{target_item.level}")
-    # Fixed: use key_methods instead of features
-    if ai.get("key_methods"):
-        context_lines.append(f"关键手法：{ai['key_methods']}")
-    if ai.get("history"):
-        context_lines.append(f"来源：{ai['history']}")
-    # Fixed: use prevention_advice instead of cultural_value
-    if ai.get("prevention_advice"):
-        context_lines.append(f"防范建议：{ai['prevention_advice']}")
+    if target_item.custom_subcategory:
+        context_lines.append(f"细分类：{target_item.custom_subcategory}")
+    if target_item.risk_level:
+        context_lines.append(f"风险等级：{target_item.risk_level}")
+    if target_item.key_methods:
+        context_lines.append(f"关键手法：{'；'.join(target_item.key_methods)}")
+    if target_item.source_name:
+        context_lines.append(f"来源：{target_item.source_name}")
+    if target_item.prevention_advice:
+        context_lines.append(f"防范建议：{target_item.prevention_advice}")
     context_lines.append(f"简介：{target_item.summary}")
     context_lines.append(f"正文片段：{target_item.content[:800]}")
     context = "\n".join(context_lines)
@@ -240,8 +234,7 @@ def handle_browse(agent: Agent, analysis) -> AgentResult:
         agent.kb,
         query=analysis.rewritten_query,
         category=category,
-        province=province,
-        level=level,
+        risk_level=level,
         limit=limit,
     )
 
@@ -250,20 +243,22 @@ def handle_browse(agent: Agent, analysis) -> AgentResult:
     header = f"找到 {total} 条{filter_desc}相关案例：\n" if total else f"未找到匹配的{filter_desc}相关案例。"
     lines = [header]
     for i, item in enumerate(result, 1):
-        level_str = f" | {item.level}" if item.level else ""
-        city_str = f" | {item.city}" if item.city else ""
-        lines.append(f"{i}. {_title_with_family(item)} -- {item.category}{level_str}{city_str}")
+        level_str = f" | {item.risk_level}" if item.risk_level else ""
+        subtype_str = f" | {item.custom_subcategory}" if item.custom_subcategory else ""
+        lines.append(f"{i}. {_title_with_family(item)} -- {item.ccl2023_category}{level_str}{subtype_str}")
 
     evidence = []
     for item in result:
         evidence.append({
             "type": "source",
             "claim": "筛选命中",
-            "basis": f"province={province}, category={category}, level={level}",
+            "basis": f"province={province}, category={category}, risk_level={level}",
             "item_id": item.id,
         })
 
     warnings = []
+    if province:
+        warnings.append(f"当前资料库未提供地区字段，已忽略地域筛选：{province}。")
     if not total:
         warnings.append(f"未找到{filter_desc}相关案例")
     elif total > limit:
@@ -348,7 +343,7 @@ def handle_recommend(agent: Agent, analysis) -> AgentResult:
         selected = _parse_llm_selection(response, limit)
     except Exception:
         unique.sort(key=lambda x: (
-            5 if x.level == "极高" else 3 if x.level == "高" else 1 if x.level == "中" else 0
+            5 if x.risk_level == "极高" else 3 if x.risk_level == "高" else 1 if x.risk_level == "中" else 0
         ), reverse=True)
         selected = [item.id for item in unique[:limit]]
 
@@ -371,18 +366,15 @@ def handle_recommend(agent: Agent, analysis) -> AgentResult:
     parts.append("")
     for i, item in enumerate(top, 1):
         title = _title_with_family(item)
-        location = "、".join(part for part in [item.province, item.city, item.district] if part)
         display = "、".join(item.entry_channels) if item.entry_channels else "案例讲解、风险提示"
-        ai = get_ai_fields(item.id)
-        feature_text = ai.get("key_methods", "") or item.summary
+        feature_text = "；".join(item.key_methods) or item.summary
         feature_text = _short_text(feature_text, 150)
         summary = _short_text(item.summary, 120)
         boundary = _recommendation_boundary(item, scenario)
         parts.append(f"### {i}. {title}")
         parts.append(
-            f"{title}属于{item.category}"
-            f"{f'，发生或收录地区为{location}' if location else ''}"
-            f"{f'，级别为{item.level}' if item.level else ''}。"
+            f"{title}属于{item.ccl2023_category}"
+            f"{f'，级别为{item.risk_level}' if item.risk_level else ''}。"
             f"它适合放在「{scenario or '通用'}」里，是因为资料中明确呈现了“{display}”等风险触点，"
             f"听众可以先通过讲解了解案情背景，再围绕诈骗入口、话术和转账节点进行讨论。"
             f"{feature_text or summary}"
@@ -406,7 +398,7 @@ def handle_recommend(agent: Agent, analysis) -> AgentResult:
         evidence.append({
             "type": "inferred",
             "claim": "推荐排序",
-            "basis": f"scenario={scenario}, level={item.level}",
+            "basis": f"scenario={scenario}, risk_level={item.risk_level}",
             "item_id": item.id,
         })
 
@@ -451,8 +443,8 @@ def handle_lecture(agent: Agent, analysis) -> AgentResult:
     for item_data in rec.items:
         display_str = "、".join(item_data.get("entry_channels", ["展板"]))
         item_title = item_data["title"]
-        family = item_data.get("family") or ""
-        display_title = f"{item_title}（{family}）" if family and family not in item_title else item_title
+        category_name = item_data.get("ccl2023_category") or ""
+        display_title = f"{item_title}（{category_name}）" if category_name and category_name not in item_title else item_title
         template_items.append({
             "display_title": display_title,
             "display_str": display_str,
@@ -507,7 +499,7 @@ def _recommendation_boundary(item, scene: str) -> str:
 
 def _item_reason_tags(item, scenario: str = "") -> list[str]:
     tags = []
-    lvl = item.level
+    lvl = item.risk_level
     if lvl == "极高":
         tags.append("极高风险")
     elif lvl == "高":
@@ -517,7 +509,7 @@ def _item_reason_tags(item, scenario: str = "") -> list[str]:
     if item.entry_channels:
         forms = item.entry_channels[:3]
         tags.append(f"📐 {'·'.join(forms)}")
-    if scenario and scenario in item.suitable_scenarios:
+    if scenario and scenario_match_score(item, scenario) >= 4:
         tags.append(f"🎯 {scenario}")
     return tags
 
@@ -548,10 +540,9 @@ def _select_exhibition_core_item(candidate_items, scene, audience, time_budget):
     for index, item in enumerate(candidate_items, 1):
         meta = " · ".join(
             part for part in [
-                str(item.get("category") or ""),
-                str(item.get("level") or ""),
-                str(item.get("province") or ""),
-                str(item.get("city") or ""),
+                str(item.get("ccl2023_category") or ""),
+                str(item.get("custom_subcategory") or ""),
+                str(item.get("risk_level") or ""),
             ] if part
         )
         entry_channels = "、".join(item.get("entry_channels") or [])

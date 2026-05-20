@@ -119,23 +119,21 @@ def _compact_item_payload(item: dict) -> dict:
     for key in (
         "id",
         "title",
-        "family",
-        "category",
-        "level",
-        "province",
-        "city",
-        "district",
+        "ccl2023_category",
+        "custom_subcategory",
+        "risk_level",
+        "victim_group",
     ):
         value = str(item.get(key) or "").strip()
         if value:
             compact[key] = value
 
-    for key in ("summary", "content", "features", "history", "cultural_value"):
+    for key in ("summary", "content", "source_name", "prevention_advice", "risk_signals"):
         value = str(item.get(key) or "").strip()
         if value:
             compact[key] = value[:ITEM_TEXT_TRUNCATE]
 
-    for key in ("entry_channels", "suitable_scenarios"):
+    for key in ("entry_channels", "key_methods", "tags"):
         value = item.get(key)
         if isinstance(value, (list, tuple)):
             compact[key] = [str(part) for part in value[:6] if str(part).strip()]

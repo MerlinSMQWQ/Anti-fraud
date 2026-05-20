@@ -20,14 +20,12 @@ def render_template(name: str, **kwargs) -> str:
 def build_transform_local(transform_type: str, target_item) -> str:
     """Build a template-based local answer for content transformation."""
     from ..service.item_cards import _title_with_family
-    from ..domain.dataset import get_ai_fields
 
     title = _title_with_family(target_item)
-    category = target_item.category
+    category = target_item.ccl2023_category
     summary = target_item.summary
-    ai = get_ai_fields(target_item.id)
-    features = ai.get("key_methods", "") or summary
-    level = target_item.level or ""
+    features = "；".join(target_item.key_methods) or summary
+    level = target_item.risk_level or ""
 
     return render_template(
         "transform_local.md.j2",

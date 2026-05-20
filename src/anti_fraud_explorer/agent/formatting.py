@@ -19,17 +19,16 @@ def format_context_item_for_llm(item: Any) -> str:
 
     meta = " | ".join(
         part for part in [
-            str(item.get("category") or "").strip(),
-            str(item.get("level") or "").strip(),
-            str(item.get("province") or "").strip(),
-            str(item.get("city") or "").strip(),
-            str(item.get("district") or "").strip(),
+            str(item.get("ccl2023_category") or "").strip(),
+            str(item.get("custom_subcategory") or "").strip(),
+            str(item.get("risk_level") or "").strip(),
+            str(item.get("victim_group") or "").strip(),
         ] if part
     )
     label = f"- [{item_id}] {title}" if item_id else f"- {title}"
     lines = [f"{label} | {meta}" if meta else label]
 
-    for key in ("summary", "features", "history", "cultural_value", "content"):
+    for key in ("summary", "source_name", "prevention_advice", "content"):
         value = normalize_text(item.get(key) or "")
         if value:
             label_name = FRAUD_LABEL_MAP.get(key, key)
@@ -47,18 +46,14 @@ def items_to_llm_context(items: list[Any], total: int) -> str:
     """Format search results as compact context for the answer LLM."""
     lines = [f"从资料库中检索到 {total} 条相关反诈案例，以下是其中最相关的：\n"]
     for i, item in enumerate(items[:30], 1):
-        loc = " · ".join(p for p in [item.province, item.city] if p)
         forms = "、".join(item.entry_channels) if item.entry_channels else ""
-        scenarios = "、".join(item.suitable_scenarios) if item.suitable_scenarios else ""
         lines.append(
             f"{i}. [{item.id}] {_title_with_family(item)}\n"
-            f"   类别：{item.category} | 级别：{item.level} | 地区：{loc}\n"
+            f"   类别：{item.ccl2023_category} | 风险等级：{item.risk_level}\n"
             f"   简介：{item.summary[:200]}"
         )
         if forms:
             lines.append(f"   入口渠道：{forms}")
-        if scenarios:
-            lines.append(f"   适合场景：{scenarios}")
         content_snippet = item.content[:300].replace("\n", " ")
         if content_snippet:
             lines.append(f"   正文：{content_snippet}")
@@ -70,11 +65,9 @@ def items_to_title_context(items: list[Any], total: int) -> str:
     """Format broad first-round candidates as title-only planning context."""
     lines = [f"第 1 轮候选标题共 {total} 项，以下为标题和基础元数据：\n"]
     for i, item in enumerate(items[:100], 1):  # INITIAL_TITLE_CONTEXT_LIMIT
-        loc = " · ".join(part for part in [item.province, item.city, item.district] if part)
         forms = "、".join(item.entry_channels[:4]) if item.entry_channels else ""
-        scenarios = "、".join(item.suitable_scenarios[:4]) if item.suitable_scenarios else ""
-        meta = " | ".join(part for part in [item.category, item.level, loc] if part)
-        extra = "；".join(part for part in [f"入口渠道：{forms}" if forms else "", f"场景：{scenarios}" if scenarios else ""] if part)
+        meta = " | ".join(part for part in [item.ccl2023_category, item.risk_level, item.custom_subcategory] if part)
+        extra = "；".join(part for part in [f"入口渠道：{forms}" if forms else ""] if part)
         suffix = f" | {extra}" if extra else ""
         lines.append(f"{i}. [{item.id}] {_title_with_family(item)} | {meta}{suffix}")
     return "\n".join(lines)
@@ -85,7 +78,7 @@ def context_title_keywords(items: list[Any]) -> list[str]:
     keywords: list[str] = []
     suffixes = ("诈骗", "刷单", "返利", "冒充", "贷款", "游戏", "理财", "养老", "客服", "公检法", "征信", "虚假", "投资")
     for item in items:
-        texts = [getattr(item, "family", ""), getattr(item, "title", "")]
+        texts = [getattr(item, "ccl2023_category", ""), getattr(item, "custom_subcategory", ""), getattr(item, "title", "")]
         for text in texts:
             text = normalize_text(text)
             if not text:
@@ -105,11 +98,10 @@ def candidate_summaries_for_llm(items: list[Any], limit: int) -> str:
     lines = []
     for item in items:
         forms = "、".join(item.entry_channels) if item.entry_channels else "无"
-        location = " · ".join(p for p in [item.province, item.city] if p)
         lines.append(
             f"[{item.id}] {_title_with_family(item)} | "
-            f"{item.category} | {item.level} | "
-            f"{location} | 入口渠道：{forms} | "
+            f"{item.ccl2023_category} | {item.risk_level} | "
+            f"入口渠道：{forms} | "
             f"{item.summary[:80]}"
         )
     return "\n".join(lines)

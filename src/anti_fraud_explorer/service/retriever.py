@@ -368,12 +368,12 @@ class QueryAnalyzer:
     # ── extraction methods ──
 
     def _extract_entities(self, query: str) -> list[str]:
-        """Link query substrings to CaseItem titles and families."""
+        """Link query substrings to CaseItem titles and categories."""
         if not query:
             return []
         title_matches: list[str] = []
         base_matches: list[str] = []
-        family_matches: list[str] = []
+        category_matches: list[str] = []
         for item in self.kb.items:
             title = item.title
             if title in query:
@@ -384,9 +384,9 @@ class QueryAnalyzer:
             if len(base_title) >= 2 and base_title in query:
                 base_matches.append(base_title)
                 continue
-            if len(item.family) >= 2 and item.family in query:
-                family_matches.append(item.family)
-        return list(dict.fromkeys(title_matches + base_matches + family_matches))
+            if len(item.ccl2023_category) >= 2 and item.ccl2023_category in query:
+                category_matches.append(item.ccl2023_category)
+        return list(dict.fromkeys(title_matches + base_matches + category_matches))
 
     def _extract_categories(self, query: str) -> list[str]:
         """Extract all matching fraud categories from query."""
@@ -410,21 +410,15 @@ class QueryAnalyzer:
         return result
 
     def _extract_cities(self, query: str) -> list[str]:
-        """Extract city names from query using StructuredMeta and regex."""
+        """Extract city names from query with regex only.
+
+        The normalized v3 dataset no longer stores structured city fields.
+        """
         if not query:
             return []
         found: list[str] = []
-        # Regex-based city matching
         for m in _CITY_PATTERN.finditer(query):
             found.append(m.group(1))
-        # Also check against known cities from extraction cache
-        known: set[str] = set()
-        for item in self.kb.items:
-            if item.city:
-                known.add(item.city)
-        for city in sorted(known, key=len, reverse=True):
-            if city not in found and city in query:
-                found.append(city)
         return found
 
     def _extract_scenario_str(self, query: str) -> str:

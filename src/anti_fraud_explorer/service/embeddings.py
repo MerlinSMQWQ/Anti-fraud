@@ -112,8 +112,8 @@ def build_embedding_text(item: CaseItem, max_chars: int | None = None) -> str:
     max_chars = settings.embedding_text_max_chars if max_chars is None else max_chars
     parts = [
         f"名称：{item.title}",
-        f"系列：{item.family}" if item.family else "",
-        f"类别：{item.category}",
+        f"类别：{item.ccl2023_category}" if item.ccl2023_category else "",
+        f"细分：{item.custom_subcategory}" if item.custom_subcategory else "",
         f"摘要：{item.summary}",
         f"正文：{item.content}",
     ]

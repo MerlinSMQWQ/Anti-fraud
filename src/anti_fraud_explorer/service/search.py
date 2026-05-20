@@ -175,45 +175,28 @@ def search_items(
     kb: KnowledgeBase,
     query: str = "",
     category: str = "",
-    province: str = "",
-    level: str = "",
-    district: str = "",
+    risk_level: str = "",
     keywords: str = "",
     limit: int = 30,
     offset: int = 0,
 ) -> tuple[list[CaseItem], int]:
     query = normalize_text(query)
     category = normalize_text(category)
-    province = normalize_text(province)
-    level = normalize_text(level)
-    district = normalize_text(district)
+    risk_level = normalize_text(risk_level)
     keywords = normalize_text(keywords)
     candidates: Iterable[CaseItem] = kb.items
 
     if category:
-        candidates = (item for item in candidates if item.category == category)
-    if province:
-        candidates = (
-            item for item in candidates
-            if item.province == province
-        )
-    if level:
-        candidates = (
-            item for item in candidates
-            if item.level == level
-        )
-    if district:
-        candidates = (
-            item for item in candidates
-            if district in item.district
-        )
+        candidates = (item for item in candidates if item.ccl2023_category == category)
+    if risk_level:
+        candidates = (item for item in candidates if item.risk_level == risk_level)
     if keywords:
         query = f"{keywords} {query}".strip()
 
     candidates = list(candidates)
 
     if not query:
-        result = sorted(candidates, key=lambda item: (item.category, item.title))
+        result = sorted(candidates, key=lambda item: (item.ccl2023_category, item.title))
         return result[offset : offset + limit], len(result)
 
     search_query = normalize_search_query(query)

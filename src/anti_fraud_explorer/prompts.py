@@ -54,7 +54,7 @@ def get_structured_labels() -> tuple[str, ...]:
 
 FRAUD_LABEL_MAP: Final[dict[str, str]] = {
     "key_methods": "关键手法",
-    "history": "来源",
+    "source_name": "来源",
     "prevention_advice": "防范建议",
     "entry_channels": "入口渠道",
     "summary": "简介",

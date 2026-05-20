@@ -77,23 +77,19 @@ def create_app() -> Flask:
         kb = get_knowledge_base()
         query = request.args.get("q", "")
         category = request.args.get("category", "")
-        province = request.args.get("province", "")
-        level = request.args.get("level", "")
-        district = request.args.get("district", "")
+        risk_level = request.args.get("risk_level", "") or request.args.get("level", "")
         keywords = request.args.get("keywords", "")
         limit = max(int(request.args.get("limit", "30")), 1)
         offset = max(int(request.args.get("offset", "0")), 0)
 
         if request.args.get("stream") == "1":
-            return _stream_items(kb, query, category, province, level, district, keywords, limit, offset)
+            return _stream_items(kb, query, category, risk_level, keywords, limit, offset)
 
         result, total, _structured = _search_items_for_api(
             kb,
             query=query,
             category=category,
-            province=province,
-            level=level,
-            district=district,
+            risk_level=risk_level,
             keywords=keywords,
             limit=limit,
             offset=offset,
@@ -301,7 +297,7 @@ def _tts_extension() -> str:
 
 
 def _stream_items(
-    kb, query: str, category: str, province: str, level: str, district: str,
+    kb, query: str, category: str, risk_level: str,
     keywords: str, limit: int, offset: int,
 ):
     """SSE helper: stream unified search results."""
@@ -312,7 +308,7 @@ def _stream_items(
 
         result, total, _structured = _search_items_for_api(
             kb, query=query, category=category,
-            province=province, level=level, district=district, keywords=keywords,
+            risk_level=risk_level, keywords=keywords,
             limit=limit, offset=offset,
         )
         yield _sse_event({
@@ -335,26 +331,21 @@ def _search_items_for_api(
     kb,
     query: str = "",
     category: str = "",
-    province: str = "",
-    level: str = "",
-    district: str = "",
+    risk_level: str = "",
     keywords: str = "",
     limit: int = 30,
     offset: int = 0,
 ):
-    structured = _structured_search_parts(kb, query, province, level)
+    structured = _structured_search_parts(query, risk_level)
     scenario = structured["scenario"]
-    derived_province = province or structured["province"]
-    derived_level = level or structured["level"]
+    derived_level = risk_level or structured["risk_level"]
 
-    if scenario or (derived_province and not province) or (derived_level and not level):
+    if scenario or (derived_level and not risk_level):
         result, total = _search_structured_items(
             kb,
             query=structured["query"],
             category=category,
-            province=derived_province,
-            level=derived_level,
-            district=district,
+            risk_level=derived_level,
             keywords=keywords,
             scenario=scenario,
             limit=limit,
@@ -366,9 +357,7 @@ def _search_items_for_api(
         kb,
         query=query,
         category=category,
-        province=province,
-        level=level,
-        district=district,
+        risk_level=risk_level,
         keywords=keywords,
         limit=limit,
         offset=offset,
@@ -376,15 +365,13 @@ def _search_items_for_api(
     return result, total, False
 
 
-def _structured_search_parts(kb, query: str, province: str, level: str) -> dict[str, str]:
+def _structured_search_parts(query: str, risk_level: str) -> dict[str, str]:
     text = normalize_text(query)
     scenario = _query_scenario(text)
-    derived_level = "" if level else _query_level(text)
-    derived_province = "" if province else _query_province(kb, text, bool(scenario or derived_level))
-    cleaned = _clean_structured_query(text, derived_province, derived_level, scenario)
+    derived_level = "" if risk_level else _query_level(text)
+    cleaned = _clean_structured_query(text, derived_level, scenario)
     return {
-        "province": derived_province,
-        "level": derived_level,
+        "risk_level": derived_level,
         "scenario": scenario,
         "query": cleaned,
     }
@@ -394,29 +381,21 @@ def _search_structured_items(
     kb,
     query: str,
     category: str,
-    province: str,
-    level: str,
-    district: str,
+    risk_level: str,
     keywords: str,
     scenario: str,
     limit: int,
     offset: int,
 ):
     category = normalize_text(category)
-    province = normalize_text(province)
-    level = normalize_text(level)
-    district = normalize_text(district)
+    risk_level = normalize_text(risk_level)
     query = " ".join(part for part in [normalize_text(keywords), normalize_text(query)] if part)
 
     candidates = []
     for item in kb.items:
-        if category and item.category != category:
+        if category and item.ccl2023_category != category:
             continue
-        if province and item.province != province:
-            continue
-        if level and item.level != level:
-            continue
-        if district and district not in item.district:
+        if risk_level and item.risk_level != risk_level:
             continue
         if scenario and not _item_matches_scenario(item, scenario):
             continue
@@ -432,7 +411,7 @@ def _search_structured_items(
 
     scored = sorted(
         candidates,
-        key=lambda item: (-_structured_item_score(item, scenario), item.category, item.title),
+        key=lambda item: (-_structured_item_score(item, scenario), item.ccl2023_category, item.title),
     )
     return scored[offset : offset + limit], len(scored)
 
@@ -444,54 +423,6 @@ class _FilteredKnowledgeBase:
 
     def get(self, item_id: str):
         return next((item for item in self.items if item.id == item_id), None)
-
-
-def _query_province(kb, query: str, allow_short_match: bool) -> str:
-    for province in sorted({item.province for item in kb.items if item.province}, key=len, reverse=True):
-        if province in query:
-            return province
-    if not allow_short_match:
-        return ""
-
-    short_map = {
-        "河南": "河南省",
-        "河北": "河北省",
-        "山东": "山东省",
-        "山西": "山西省",
-        "陕西": "陕西省",
-        "湖北": "湖北省",
-        "湖南": "湖南省",
-        "广东": "广东省",
-        "广西": "广西壮族自治区",
-        "江苏": "江苏省",
-        "浙江": "浙江省",
-        "福建": "福建省",
-        "四川": "四川省",
-        "云南": "云南省",
-        "贵州": "贵州省",
-        "甘肃": "甘肃省",
-        "青海": "青海省",
-        "辽宁": "辽宁省",
-        "吉林": "吉林省",
-        "黑龙江": "黑龙江省",
-        "安徽": "安徽省",
-        "江西": "江西省",
-        "海南": "海南省",
-        "台湾": "台湾省",
-        "北京": "北京市",
-        "天津": "天津市",
-        "上海": "上海市",
-        "重庆": "重庆市",
-        "内蒙古": "内蒙古自治区",
-        "西藏": "西藏自治区",
-        "宁夏": "宁夏回族自治区",
-        "新疆": "新疆维吾尔自治区",
-    }
-    tokens = re.findall(r"[\w\u4e00-\u9fff]+", query)
-    for short, full in short_map.items():
-        if short in tokens:
-            return full
-    return ""
 
 
 def _query_level(query: str) -> str:
@@ -520,13 +451,10 @@ def _query_scenario(query: str) -> str:
     return ""
 
 
-def _clean_structured_query(query: str, province: str, level: str, scenario: str) -> str:
+def _clean_structured_query(query: str, risk_level: str, scenario: str) -> str:
     cleaned = query
-    if province:
-        cleaned = cleaned.replace(province, " ")
-        cleaned = cleaned.replace(province.removesuffix("省").removesuffix("市"), " ")
-    if level:
-        cleaned = cleaned.replace(level, " ")
+    if risk_level:
+        cleaned = cleaned.replace(risk_level, " ")
     scenario_terms = {
         "社区宣传": ("社区宣传", "社区", "居民", "适合"),
         "校园宣讲": ("校园宣讲", "校园", "学校", "学生", "班会", "适合"),
@@ -549,11 +477,11 @@ def _item_matches_scenario(item, scenario: str) -> bool:
 def _structured_item_score(item, scenario: str) -> int:
     score = 0
     score += scenario_match_score(item, scenario)
-    if item.level == "极高":
+    if item.risk_level == "极高":
         score += 4
-    elif item.level == "高":
+    elif item.risk_level == "高":
         score += 3
-    elif item.level == "中":
+    elif item.risk_level == "中":
         score += 2
     score += min(len(item.entry_channels), 3)
     return score
@@ -564,9 +492,7 @@ def _sse_event(data: dict) -> str:
 
 
 def _item_payload(item, include_content: bool = False) -> dict:
-    data = item_to_dict(item, include_content=include_content)
-    data["suitable_scenarios"] = list(item.suitable_scenarios[:4])
-    return data
+    return item_to_dict(item, include_content=include_content)
 
 
 def main() -> None:

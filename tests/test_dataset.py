@@ -42,7 +42,7 @@ def test_dataset_items_have_required_fields():
     item = kb.items[0]
     assert item.id
     assert item.title
-    assert item.category
+    assert item.ccl2023_category
     assert item.content
 
 

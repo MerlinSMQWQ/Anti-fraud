@@ -232,7 +232,7 @@ function renderResultItems(payload) {
         ${items.map((item) => {
           const meta = itemMetaParts(item, { skipLevel: !!item?.reason_tags?.length }).join(" · ");
           const tags = itemTagList(item, 3);
-          const category = item?.category || "未分类";
+          const category = item?.ccl2023_category || "未分类";
           return `
             <button
               class="result-item-link"
@@ -391,10 +391,9 @@ function contextItemPayload(item) {
   return {
     id: item?.id || "",
     title: itemTitle(item),
-    family: item?.family || "",
-    category: item?.category || "",
-    level: item?.level || "",
-    address: item?.address || "",
+    ccl2023_category: item?.ccl2023_category || "",
+    custom_subcategory: item?.custom_subcategory || "",
+    risk_level: item?.risk_level || "",
   };
 }
 

@@ -106,25 +106,25 @@ def direct_item_matches(
         return []
 
     exact_title: list[CaseItem] = []
-    exact_family: list[CaseItem] = []
+    exact_category: list[CaseItem] = []
     title_contains: list[CaseItem] = []
-    family_contains: list[CaseItem] = []
+    category_contains: list[CaseItem] = []
     for item in kb.items:
-        if category and item.category != category:
+        if category and item.ccl2023_category != category:
             continue
         title = normalize_text(item.title)
-        family = normalize_text(item.family)
+        item_category = normalize_text(item.ccl2023_category)
 
         if search_query == title:
             exact_title.append(item)
         elif title and (search_query in title or title in search_query):
             title_contains.append(item)
-        elif family and search_query == family:
-            exact_family.append(item)
-        elif family and (search_query in family or family in search_query):
-            family_contains.append(item)
+        elif item_category and search_query == item_category:
+            exact_category.append(item)
+        elif item_category and (search_query in item_category or item_category in search_query):
+            category_contains.append(item)
 
-    return _dedupe_items(exact_title) or _dedupe_items(title_contains + exact_family + family_contains)
+    return _dedupe_items(exact_title) or _dedupe_items(title_contains + exact_category + category_contains)
 
 
 def _dedupe_items(items: list[CaseItem]) -> list[CaseItem]:
@@ -135,10 +135,8 @@ def _dedupe_items(items: list[CaseItem]) -> list[CaseItem]:
             normalize_text(part)
             for part in (
                 item.title,
-                item.family,
-                item.category,
-                item.province,
-                item.city or item.district,
+                item.ccl2023_category,
+                item.custom_subcategory,
             )
         )
         if key in seen:
@@ -156,7 +154,7 @@ def build_local_answer(question: str, sources: list[CaseItem]) -> str:
     for item in sources[:3]:
         text = item_context_text(item) or item.summary or item.content
         snippet = summarize_snippet(text)
-        bullets.append(f"- {item.title}（{item.category}）：{snippet}")
+        bullets.append(f"- {item.title}（{item.ccl2023_category}）：{snippet}")
     return "\n".join([lead, *bullets])
 
 

@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .models import AgentResult, TaskType
-from ..domain.dataset import KnowledgeBase, get_ai_fields, normalize_text
+from ..domain.dataset import KnowledgeBase, normalize_text
 from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
 from ..service.retriever import _PROVINCE_PATTERN, _SHORT_PROVINCE_MAP
 
@@ -48,16 +48,16 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
         )
 
     # Search each target entity in the KB
-    resolved: list[tuple[str, Any, Any, Any]] = []  # (entity_name, item, ai_fields)
+    resolved: list[tuple[str, Any]] = []
     unmatched: list[str] = []
     used_item_ids: set[str] = set()
 
     for t in targets:
         match = _resolve_comparison_target(kb, t, used_item_ids)
         if match:
-            display_name, item, ai = match
+            display_name, item = match
             used_item_ids.add(item.id)
-            resolved.append((display_name, item, ai))
+            resolved.append((display_name, item))
         else:
             unmatched.append(t)
 
@@ -81,9 +81,9 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
                 "",
             ])
             for index, item in enumerate(suggestions, 1):
-                location = " · ".join(part for part in [item.province, item.city] if part)
-                category = item.category
-                desc = " · ".join(part for part in [category, location] if part)
+                desc = " · ".join(
+                    part for part in [item.ccl2023_category, item.risk_level] if part
+                )
                 answer_lines.append(f"{index}. {_title_with_family(item)}" + (f"（{desc}）" if desc else ""))
             answer_lines.extend([
                 "",
@@ -115,12 +115,12 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
 
     # Build comparison answer
     lines: list[str] = []
-    lines.append(f"## {' vs '.join(name for name, _, _, _ in resolved)} 对比\n")
+    lines.append(f"## {' vs '.join(name for name, _ in resolved)} 对比\n")
 
     # ── Table header ──
     col_width = 18
     header = f"| {'维度':<{col_width - 4}}" + "".join(
-        f" | {name[:col_width - 2]:<{col_width - 2}}" for name, _, _, _ in resolved
+        f" | {name[:col_width - 2]:<{col_width - 2}}" for name, _ in resolved
     ) + " |"
     sep = "|" + "-" * (col_width - 1) + "|" + "|".join("-" * (col_width - 1) for _ in resolved) + "|"
     lines.append(header)
@@ -132,34 +132,27 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
         ) + " |"
 
     # Category row
-    lines.append(_row("类别", *(item.category for _, item, _, _ in resolved)))
+    lines.append(_row("类别", *(item.ccl2023_category for _, item in resolved)))
 
-    # Level row
-    lines.append(_row("风险等级", *(meta.level if meta else "\u2014" for _, _, meta, _ in resolved)))
+    lines.append(_row("细分类", *(item.custom_subcategory or "—" for _, item in resolved)))
+    lines.append(_row("风险等级", *(item.risk_level or "—" for _, item in resolved)))
 
-    # Province row
-    lines.append(_row("省份", *(meta.province if meta else "—" for _, _, meta, _ in resolved)))
-
-    # City row
-    lines.append(_row("城市", *(meta.city if meta and meta.city else "—" for _, _, meta, _ in resolved)))
-
-    # Entry channels
     lines.append(_row(
         "入口渠道",
-        *("、".join(meta.entry_channels) if meta and meta.entry_channels else "\u2014" for _, _, meta, _ in resolved),
+        *("、".join(item.entry_channels) if item.entry_channels else "\u2014" for _, item in resolved),
     ))
 
     # ── Narrative sections ──
     lines.append("")
-    for entity_name, item, ai in resolved:
+    for entity_name, item in resolved:
         lines.append(f"### {entity_name}")
-        if ai.get("key_methods"):
-            lines.append(f"**诈骗手法：**{ai['key_methods'][:200]}")
-        if ai.get("history"):
-            lines.append(f"**来源：**{ai['history'][:200]}")
-        if ai.get("prevention_advice"):
-            lines.append(f"**防范建议：**{ai['prevention_advice'][:200]}")
-        if not (ai.get("key_methods") or ai.get("history") or ai.get("prevention_advice")):
+        if item.key_methods:
+            lines.append(f"**诈骗手法：**{'；'.join(item.key_methods)[:200]}")
+        if item.source_name:
+            lines.append(f"**来源：**{item.source_name[:200]}")
+        if item.prevention_advice:
+            lines.append(f"**防范建议：**{item.prevention_advice[:200]}")
+        if not (item.key_methods or item.source_name or item.prevention_advice):
             lines.append(f"{item.summary[:300]}")
         lines.append("")
 
@@ -168,15 +161,14 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
     summary_parts: list[str] = []
 
     # Level comparison
-    levels = [item.level or "" for _, item, _ in resolved]
+    levels = [item.risk_level or "" for _, item in resolved]
     unique_levels = list(dict.fromkeys(levels))
     if len(unique_levels) > 1:
-        summary_parts.append(f"风险等级上，{'、'.join(f'{name}为{lv}' for (name, _, _, _), lv in zip(resolved, levels))}")
+        summary_parts.append(f"风险等级上，{'、'.join(f'{name}为{lv}' for (name, _), lv in zip(resolved, levels))}")
     else:
         summary_parts.append(f"两项风险等级均为{unique_levels[0]}")
 
-    # Category comparison
-    cats = [item.category for _, item, _, _ in resolved]
+    cats = [item.ccl2023_category for _, item in resolved]
     unique_cats = list(dict.fromkeys(cats))
     if len(unique_cats) > 1:
         summary_parts.append(f"分属{'和'.join(unique_cats)}不同类别")
@@ -187,7 +179,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
 
     # Build evidence
     evidence: list[dict[str, Any]] = []
-    for entity_name, item, _, _ in resolved:
+    for entity_name, item in resolved:
         evidence.append({
             "type": "source",
             "claim": f"对比项：{entity_name}",
@@ -195,8 +187,8 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
             "item_id": item.id,
         })
 
-    sources = [_source_payload(item) for _, item, _, _ in resolved]
-    items = [_enriched_item_card(item) for _, item, _, _ in resolved]
+    sources = [_source_payload(item) for _, item in resolved]
+    items = [_enriched_item_card(item) for _, item in resolved]
 
     warnings: list[str] = []
     if unmatched:
@@ -270,12 +262,10 @@ def _resolve_comparison_target(kb: KnowledgeBase, target: str, used_item_ids: se
     best = None
     best_score = 0
     for item in candidates:
-        if province and item.province != province:
-            continue
-
         names = [
             item.title,
-            item.family,
+            item.ccl2023_category,
+            item.custom_subcategory,
         ]
         score = 0
         if cleaned in names:
@@ -288,12 +278,9 @@ def _resolve_comparison_target(kb: KnowledgeBase, target: str, used_item_ids: se
             score += 70
         if core and core in item.summary:
             score += 30
-        if province and item.province == province:
-            score += 25
 
         if score > best_score:
-            ai = get_ai_fields(item.id)
-            best = (_title_with_family(item), item, ai)
+            best = (_title_with_family(item), item)
             best_score = score
 
     if best_score < 60:

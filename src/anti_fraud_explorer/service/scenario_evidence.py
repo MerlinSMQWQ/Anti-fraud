@@ -46,14 +46,13 @@ def scenario_match_score(item: Any, scenario: str) -> int:
             str(part or "")
             for part in [
                 getattr(item, "title", ""),
-                getattr(item, "family", ""),
-                getattr(item, "category", ""),
+                getattr(item, "ccl2023_category", ""),
+                getattr(item, "custom_subcategory", ""),
                 getattr(item, "summary", ""),
                 getattr(item, "content", "")[:800],
             ]
         )
     )
-    suitable_scenarios = tuple(getattr(item, "suitable_scenarios", ()) or ())
 
     score = 0
     if scenario and scenario in display_text:
@@ -66,8 +65,6 @@ def scenario_match_score(item: Any, scenario: str) -> int:
         score += min(strong_source_hits * 5, 10)
     elif source_hits >= 2:
         score += min(source_hits * 3, 6)
-    if scenario in suitable_scenarios:
-        score += SOFT_SCENARIO_SCORE
     return score
 
 

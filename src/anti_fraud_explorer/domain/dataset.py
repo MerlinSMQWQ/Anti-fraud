@@ -1,4 +1,4 @@
-"""Dataset loading and normalized in-memory access — v3 schema (LLM-normalized)."""
+"""Dataset loading and normalized in-memory access for the v3 case schema."""
 
 from __future__ import annotations
 
@@ -24,75 +24,57 @@ class Category:
 
 
 def _parse_multivalue(value: Any) -> tuple[str, ...]:
-    """Parse a string like '电话；短信' or a list into a tuple."""
+    """Parse a string like '电话；短信' or a list into a normalized tuple."""
     if isinstance(value, (list, tuple)):
-        return tuple(str(v) for v in value)
+        return tuple(part for item in value if (part := normalize_text(str(item))))
     if isinstance(value, str) and value.strip():
-        return tuple(s.strip() for s in value.split("；") if s.strip())
+        return tuple(part for raw in value.split("；") if (part := normalize_text(raw)))
     return ()
 
 
-def _first_value(value: Any) -> str:
-    """Get the first value from a multi-value field, or the string itself."""
-    if isinstance(value, (list, tuple)):
-        return str(value[0]) if value else ""
-    if isinstance(value, str) and "；" in value:
-        return value.split("；")[0].strip()
-    return str(value) if value else ""
+def _parse_text(value: Any) -> str:
+    return normalize_text(str(value)) if value else ""
 
 
 @dataclass(frozen=True)
 class CaseItem:
-    """Anti-fraud case item — populated from LLM-normalized dataset (schema v3)."""
+    """Anti-fraud case item matching the normalized `case_items.json` schema."""
 
     id: str
     title: str
     summary: str
-
-    # ── Primary classification ──
-    ccl2023_category: str = ""
-
-    # ── Rich structured fields (directly from dataset) ──
-    nature_judgment: str = ""
-    judgment_reason: str = ""
-    entry_channels: tuple[str, ...] = ()
-    impersonated_identity: str = ""
-    false_belief: str = ""
-    key_methods: tuple[str, ...] = ()
-    target_assets: str = ""
-    fraud_stage: str = ""
-    risk_signals: str = ""
-    risk_level: str = ""
-    loss_occurred: str = ""
-    loss_type: str = ""
-    prevention_advice: str = ""
-    source_name: str = ""
-    source_type: str = ""
-    collection_date: str = ""
-    is_desensitized: str = ""
-
-    # ── Supplementary ──
-    official_category: str = ""
-    custom_subcategory: str = ""
-    tags: tuple[str, ...] = ()
-    involved_platforms: str = ""
-    victim_group: str = ""
-
-    # ── Computed fields (for search / display) ──
-
-    @property
-    def family(self) -> str:
-        """Parent category — the broad CCL2023 class name."""
-        return self.ccl2023_category
-
-    @property
-    def category(self) -> str:
-        """Same as ccl2023_category for backward compat."""
-        return self.ccl2023_category
+    nature_judgment: str
+    judgment_reason: str
+    entry_channels: tuple[str, ...]
+    impersonated_identity: str
+    false_belief: tuple[str, ...]
+    key_methods: tuple[str, ...]
+    target_assets: tuple[str, ...]
+    fraud_stage: tuple[str, ...]
+    risk_signals: str
+    risk_level: str
+    loss_occurred: str
+    loss_type: tuple[str, ...]
+    prevention_advice: str
+    source_name: str
+    source_type: str
+    collection_date: str
+    is_desensitized: str
+    official_category: tuple[str, ...]
+    ccl2023_category: str
+    custom_subcategory: str
+    tags: tuple[str, ...]
+    involved_platforms: tuple[str, ...]
+    victim_group: str
+    emergency_plan_id: str
+    law_basis_ids: tuple[str, ...]
+    source_links: tuple[str, ...]
+    publish_date: str
+    remark: str
 
     @property
     def content(self) -> str:
-        """Full text payload for embedding / context — built from structured fields."""
+        """Canonical text payload used by embedding, retrieval, and answer context."""
         parts = []
         if self.summary:
             parts.append(self.summary)
@@ -106,67 +88,19 @@ class CaseItem:
 
     @property
     def search_text(self) -> str:
-        """Lightweight text for lexical search (title + category + tags + methods + channels)."""
-        parts = [self.title, self.ccl2023_category]
+        """Lightweight text for lexical search."""
+        parts = [self.title, self.ccl2023_category, self.custom_subcategory]
         if self.tags:
             parts.extend(self.tags)
         if self.key_methods:
             parts.extend(self.key_methods)
         if self.entry_channels:
             parts.extend(self.entry_channels)
+        if self.official_category:
+            parts.extend(self.official_category)
+        if self.victim_group:
+            parts.append(self.victim_group)
         return " ".join(parts)
-
-    @property
-    def level(self) -> str:
-        """Backward-compat: risk_level mapped to old level enum."""
-        return self.risk_level
-
-    @property
-    def province(self) -> str:
-        """Province is no longer extracted at build time. Returns empty."""
-        return ""
-
-    @property
-    def city(self) -> str:
-        """City is no longer extracted at build time. Returns empty."""
-        return ""
-
-    @property
-    def district(self) -> str:
-        """District is no longer extracted at build time. Returns empty."""
-        return ""
-
-    @property
-    def suitable_scenarios(self) -> tuple[str, ...]:
-        """Scenarios are no longer pre-computed. Returns empty."""
-        return ()
-
-
-# ── ai_fields are now inline in CaseItem — kept for callers that still import it ──
-
-def get_ai_fields(item_id: str) -> dict[str, str]:
-    """Return ai_fields from CaseItem. Deprecated: fields are now inline."""
-    kb = get_knowledge_base()
-    item = kb.get(item_id)
-    if item is None:
-        return {"key_methods": "", "history": "", "prevention_advice": ""}
-    return {
-        "key_methods": "；".join(item.key_methods),
-        "history": item.source_name,
-        "prevention_advice": item.prevention_advice,
-    }
-
-
-def get_structured_meta(item_id: str) -> dict[str, Any]:
-    """Return structured metadata. Deprecated: fields are now inline."""
-    kb = get_knowledge_base()
-    item = kb.get(item_id)
-    if item is None:
-        return {"level": "", "entry_channels": ()}
-    return {
-        "level": item.risk_level,
-        "entry_channels": item.entry_channels,
-    }
 
 
 class KnowledgeBase:
@@ -184,32 +118,37 @@ class KnowledgeBase:
         ]
         self.items = [
             CaseItem(
-                id=str(item.get("case_id") or item.get("id") or ""),
-                title=str(item.get("title") or ""),
-                summary=str(item.get("summary") or ""),
-                ccl2023_category=str(item.get("ccl2023_category") or ""),
-                nature_judgment=str(item.get("nature_judgment") or ""),
-                judgment_reason=str(item.get("judgment_reason") or ""),
+                id=_parse_text(item.get("case_id") or item.get("id")),
+                title=_parse_text(item.get("title")),
+                summary=_parse_text(item.get("summary")),
+                nature_judgment=_parse_text(item.get("nature_judgment")),
+                judgment_reason=_parse_text(item.get("judgment_reason")),
                 entry_channels=_parse_multivalue(item.get("entry_channels")),
-                impersonated_identity=str(item.get("impersonated_identity") or ""),
-                false_belief=str(item.get("false_belief") or ""),
+                impersonated_identity=_parse_text(item.get("impersonated_identity")),
+                false_belief=_parse_multivalue(item.get("false_belief")),
                 key_methods=_parse_multivalue(item.get("key_methods")),
-                target_assets=str(item.get("target_assets") or ""),
-                fraud_stage=str(item.get("fraud_stage") or ""),
-                risk_signals=str(item.get("risk_signals") or ""),
-                risk_level=str(item.get("risk_level") or ""),
-                loss_occurred=str(item.get("loss_occurred") or ""),
-                loss_type=str(item.get("loss_type") or ""),
-                prevention_advice=str(item.get("prevention_advice") or ""),
-                source_name=str(item.get("source_name") or ""),
-                source_type=str(item.get("source_type") or ""),
-                collection_date=str(item.get("collection_date") or ""),
-                is_desensitized=str(item.get("is_desensitized") or ""),
-                official_category=str(item.get("official_category") or ""),
-                custom_subcategory=str(item.get("custom_subcategory") or ""),
+                target_assets=_parse_multivalue(item.get("target_assets")),
+                fraud_stage=_parse_multivalue(item.get("fraud_stage")),
+                risk_signals=_parse_text(item.get("risk_signals")),
+                risk_level=_parse_text(item.get("risk_level")),
+                loss_occurred=_parse_text(item.get("loss_occurred")),
+                loss_type=_parse_multivalue(item.get("loss_type")),
+                prevention_advice=_parse_text(item.get("prevention_advice")),
+                source_name=_parse_text(item.get("source_name")),
+                source_type=_parse_text(item.get("source_type")),
+                collection_date=_parse_text(item.get("collection_date")),
+                is_desensitized=_parse_text(item.get("is_desensitized")),
+                official_category=_parse_multivalue(item.get("official_category")),
+                ccl2023_category=_parse_text(item.get("ccl2023_category")),
+                custom_subcategory=_parse_text(item.get("custom_subcategory")),
                 tags=_parse_multivalue(item.get("tags")),
-                involved_platforms=str(item.get("involved_platforms") or ""),
-                victim_group=str(item.get("victim_group") or ""),
+                involved_platforms=_parse_multivalue(item.get("involved_platforms")),
+                victim_group=_parse_text(item.get("victim_group")),
+                emergency_plan_id=_parse_text(item.get("emergency_plan_id")),
+                law_basis_ids=_parse_multivalue(item.get("law_basis_ids")),
+                source_links=_parse_multivalue(item.get("source_links")),
+                publish_date=_parse_text(item.get("publish_date")),
+                remark=_parse_text(item.get("remark")),
             )
             for item in payload.get("items", [])
         ]
@@ -238,24 +177,35 @@ def item_to_dict(item: CaseItem, include_content: bool = False) -> dict[str, Any
     data = {
         "id": item.id,
         "title": item.title,
-        "family": item.family,
-        "category": item.category,
         "summary": item.summary,
-        "level": item.risk_level,
-        "province": item.province,
-        "city": item.city,
-        "district": item.district,
-        "entry_channels": list(item.entry_channels),
-        "suitable_scenarios": list(item.suitable_scenarios),
-        "key_methods": list(item.key_methods),
-        "history": item.source_name,
-        "prevention_advice": item.prevention_advice,
-        # New fields
-        "ccl2023_category": item.ccl2023_category,
-        "risk_level": item.risk_level,
         "nature_judgment": item.nature_judgment,
+        "judgment_reason": item.judgment_reason,
+        "entry_channels": list(item.entry_channels),
+        "impersonated_identity": item.impersonated_identity,
+        "false_belief": list(item.false_belief),
+        "key_methods": list(item.key_methods),
+        "target_assets": list(item.target_assets),
+        "fraud_stage": list(item.fraud_stage),
         "risk_signals": item.risk_signals,
+        "risk_level": item.risk_level,
+        "loss_occurred": item.loss_occurred,
+        "loss_type": list(item.loss_type),
+        "prevention_advice": item.prevention_advice,
+        "source_name": item.source_name,
+        "source_type": item.source_type,
+        "collection_date": item.collection_date,
+        "is_desensitized": item.is_desensitized,
+        "official_category": list(item.official_category),
+        "ccl2023_category": item.ccl2023_category,
+        "custom_subcategory": item.custom_subcategory,
         "tags": list(item.tags),
+        "involved_platforms": list(item.involved_platforms),
+        "victim_group": item.victim_group,
+        "emergency_plan_id": item.emergency_plan_id,
+        "law_basis_ids": list(item.law_basis_ids),
+        "source_links": list(item.source_links),
+        "publish_date": item.publish_date,
+        "remark": item.remark,
     }
     if include_content:
         data["content"] = item.content

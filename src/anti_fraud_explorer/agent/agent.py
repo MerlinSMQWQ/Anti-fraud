@@ -9,7 +9,7 @@ from dataclasses import replace
 from typing import Any
 
 from ..config import settings
-from ..domain.dataset import KnowledgeBase, get_ai_fields, normalize_text
+from ..domain.dataset import KnowledgeBase, normalize_text
 from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
 from ..service.search import (
     LEXICAL_MIN_SCORE,
@@ -334,7 +334,7 @@ class Agent:
 
         candidates = [
             item for item in self.kb.items
-            if not category or item.category == category
+            if not category or item.ccl2023_category == category
         ]
         structured_items = self._structured_initial_candidates(query, limit=INITIAL_TITLE_CANDIDATE_LIMIT)
         ranked = rank_lexical(candidates, lowered_query, tokenize(search_query))
@@ -369,30 +369,34 @@ class Agent:
     def _contextual_initial_candidates(self, context_items: list[Any], category: str) -> list[Any]:
         if not context_items:
             return []
-        categories = {item.category for item in context_items if item.category}
+        categories = {item.ccl2023_category for item in context_items if item.ccl2023_category}
         if category:
             categories.add(category)
         title_keywords = context_title_keywords(context_items)
         context_ids = {item.id for item in context_items}
         forms = {form for item in context_items for form in item.entry_channels}
-        scenarios = {scenario for item in context_items for scenario in item.suitable_scenarios}
 
         scored: list[tuple[int, str, Any]] = []
         for item in self.kb.items:
             score = 0
             if item.id in context_ids:
                 score += 12
-            if categories and item.category in categories:
+            if categories and item.ccl2023_category in categories:
                 score += 6
-            if any(keyword and (keyword in item.title or keyword in item.family) for keyword in title_keywords):
+            if any(
+                keyword and (
+                    keyword in item.title
+                    or keyword in item.ccl2023_category
+                    or keyword in item.custom_subcategory
+                )
+                for keyword in title_keywords
+            ):
                 score += 10
             if forms and any(form in forms for form in item.entry_channels):
                 score += 2
-            if scenarios and any(scenario in scenarios for scenario in item.suitable_scenarios):
-                score += 1
-            if item.level == "极高":
+            if item.risk_level == "极高":
                 score += 3
-            elif item.level == "高":
+            elif item.risk_level == "高":
                 score += 2
             if score <= 0:
                 continue
@@ -407,33 +411,28 @@ class Agent:
         )
 
     def _structured_initial_candidates(self, query: str, limit: int) -> list[Any]:
-        province = self._query_province(query)
         scenario = self._query_scenario(query)
         wants_recommendation = bool(re.search(r"推荐|适合|哪些|有哪些|找|筛选|展示|宣传|宣讲|班会|活动|互动|亲子", query))
-        if not wants_recommendation or not (province or scenario):
+        if not wants_recommendation or not scenario:
             return []
 
         scored: list[tuple[int, str, Any]] = []
         for item in self.kb.items:
-            if province and item.province != province:
-                continue
             score = 0
             if scenario:
                 scenario_score = scenario_match_score(item, scenario)
                 if scenario_score < 4:
                     continue
                 score += scenario_score
-            if province:
-                score += 8
             if re.search(r"展示|宣传|宣讲|班会", query) and item.entry_channels:
                 score += 4
             if re.search(r"活动|互动", query) and item.entry_channels:
                 score += 4
-            if item.level == "极高":
+            if item.risk_level == "极高":
                 score += 4
-            elif item.level == "高":
+            elif item.risk_level == "高":
                 score += 3
-            elif item.level == "中":
+            elif item.risk_level == "中":
                 score += 1
             if item.entry_channels:
                 score += min(len(item.entry_channels), 3)
@@ -445,12 +444,6 @@ class Agent:
         return [item for _, _, item in scored[:limit]]
 
     def _query_province(self, query: str) -> str:
-        for province in {item.province for item in self.kb.items if item.province}:
-            if province and province in query:
-                return province
-        for short, full in _SHORT_PROVINCE_MAP.items():
-            if short in query:
-                return full
         return ""
 
     def _query_scenario(self, query: str) -> str:
@@ -497,9 +490,9 @@ class Agent:
         matches: list[Any] = []
         seen: set[str] = set()
         for item in self.kb.items:
-            if category and item.category != category:
+            if category and item.ccl2023_category != category:
                 continue
-            if ref in (item.id, item.title, _title_with_family(item), item.family):
+            if ref in (item.id, item.title, _title_with_family(item), item.ccl2023_category):
                 if item.id not in seen:
                     seen.add(item.id)
                     matches.append(item)
@@ -585,7 +578,7 @@ class Agent:
         ref = normalize_text(ref)
         if not ref:
             return False
-        return ref in (item.id, item.title, _title_with_family(item), item.family)
+        return ref in (item.id, item.title, _title_with_family(item), item.ccl2023_category)
 
     def _subsequent_fallback_result(
         self, query: str, context: dict, collected_items: list[Any],
@@ -603,8 +596,9 @@ class Agent:
             )
             lines = [lead]
             for item in display_items[:3]:
-                loc = " · ".join(part for part in [item.province, item.city] if part)
-                meta = " | ".join(part for part in [item.category, item.level, loc] if part)
+                meta = " | ".join(
+                    part for part in [item.ccl2023_category, item.risk_level, item.custom_subcategory] if part
+                )
                 lines.append(f"- **{_title_with_family(item)}**：{meta}")
                 if item.summary:
                     lines.append(f"  {item.summary[:140]}")
@@ -665,7 +659,7 @@ class Agent:
             title = normalize_text(item.get("title") or "")
             if title and title not in queries:
                 queries.append(title)
-            category = normalize_text(item.get("category") or "")
+            category = normalize_text(item.get("ccl2023_category") or "")
             if category and category not in queries:
                 queries.append(category)
             if len(queries) >= 4:
@@ -811,7 +805,7 @@ def normalize_query_with_pinyin_anchor(kb: KnowledgeBase, query: str, category: 
         return query
     from ..service.search import search_items_pinyin
     for item in search_items_pinyin(kb, query):
-        if category and item.category != category:
+        if category and item.ccl2023_category != category:
             continue
         corrected = replace_homophone_span(query, item.title)
         if corrected != query:

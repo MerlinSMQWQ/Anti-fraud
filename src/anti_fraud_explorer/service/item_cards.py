@@ -8,21 +8,15 @@ from ..domain.dataset import item_to_dict
 
 
 def enriched_item_card(item: Any) -> dict[str, Any]:
-    """Return item_to_dict enriched with structured metadata for UI cards."""
-    card = item_to_dict(item)
-    card["level"] = item.level
-    card["province"] = item.province
-    card["city"] = item.city
-    card["district"] = item.district
-    card["entry_channels"] = list(item.entry_channels)
-    return card
+    """Return a frontend-ready item card based on the current dataset schema."""
+    return item_to_dict(item)
 
 
 def title_with_family(item: Any) -> str:
     title = item.title
-    family = item.family
-    if family and family not in title:
-        return f"{title}（{family}）"
+    category = item.ccl2023_category
+    if category and category not in title:
+        return f"{title}（{category}）"
     return title
 
 
@@ -30,8 +24,8 @@ def source_payload(item: Any) -> dict[str, str]:
     return {
         "id": item.id,
         "title": item.title,
-        "family": item.family,
-        "category": item.category,
+        "ccl2023_category": item.ccl2023_category,
+        "custom_subcategory": item.custom_subcategory,
     }
 
 
