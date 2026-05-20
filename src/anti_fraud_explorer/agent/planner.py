@@ -1,7 +1,5 @@
 """Model-based intent planner for the anti-fraud agent."""
 
-from __future__ import annotations
-
 import json
 from typing import Any
 

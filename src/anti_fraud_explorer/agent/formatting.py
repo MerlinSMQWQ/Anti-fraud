@@ -1,7 +1,5 @@
 """Formatting helpers for LLM contexts, candidate summaries, and keyword extraction."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..domain.dataset import normalize_text

@@ -1,7 +1,5 @@
 """Comparison task handler for the anti-fraud agent."""
 
-from __future__ import annotations
-
 import re
 from typing import Any
 

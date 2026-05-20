@@ -11,8 +11,6 @@ Usage:
     python scripts/process_raw_data.py --source data/raw/dataset.json --output data/processed/case_items.json --dry-run
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import logging

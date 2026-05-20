@@ -1,7 +1,5 @@
 """Rebuild the local semantic search index after the dataset changes."""
 
-from __future__ import annotations
-
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -201,4 +199,3 @@ def indexed_item_count(items: list[CaseItem], indexed: dict[str, dict[str, Any]]
 
 if __name__ == "__main__":
     main()
-

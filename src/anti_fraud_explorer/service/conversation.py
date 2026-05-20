@@ -5,8 +5,6 @@ items used by the answer.  The store is a module-level singleton — sessions
 are lost on server restart.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 MAX_ROUNDS = 5

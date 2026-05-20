@@ -1,7 +1,5 @@
 """Dataset loading and normalized in-memory access for the v3 case schema."""
 
-from __future__ import annotations
-
 import json
 import re
 from dataclasses import dataclass

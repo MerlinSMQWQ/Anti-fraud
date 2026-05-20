@@ -1,7 +1,5 @@
 """Presentation helpers for turning dataset items into UI cards."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..domain.dataset import item_to_dict

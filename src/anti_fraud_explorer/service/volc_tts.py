@@ -1,7 +1,5 @@
 """Server-side TTS: Volcengine + OpenAI-compatible fallback."""
 
-from __future__ import annotations
-
 import base64
 import hashlib
 import json
@@ -438,4 +436,3 @@ def _mime_type(encoding: str = "") -> str:
         "wav": "audio/wav",
         "pcm": "audio/L16",
     }.get(enc, "application/octet-stream")
-

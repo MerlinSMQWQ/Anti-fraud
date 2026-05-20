@@ -1,7 +1,5 @@
 """OpenAI-compatible embedding indexing and semantic retrieval."""
 
-from __future__ import annotations
-
 import json
 import math
 import textwrap

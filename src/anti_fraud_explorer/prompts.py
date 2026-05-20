@@ -9,8 +9,6 @@ constants and compiled patterns, safe for use from any layer without
 circular dependency risks.
 """
 
-from __future__ import annotations
-
 import re
 from typing import Final
 

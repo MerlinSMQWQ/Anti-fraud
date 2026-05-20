@@ -1,7 +1,5 @@
 """Handler functions for each TaskType (comparison, study task, etc.)."""
 
-from __future__ import annotations
-
 import json
 import re
 from dataclasses import replace

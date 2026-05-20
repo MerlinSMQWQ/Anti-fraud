@@ -1,7 +1,5 @@
 """Context building and text extraction for the anti-fraud AI — v3 schema."""
 
-from __future__ import annotations
-
 from ..domain.dataset import CaseItem, normalize_text
 
 

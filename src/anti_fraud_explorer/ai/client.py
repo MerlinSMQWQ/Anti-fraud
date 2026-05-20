@@ -1,7 +1,5 @@
 """Model-calling functions for the anti-fraud AI."""
 
-from __future__ import annotations
-
 
 from ..config import settings
 from ..domain.dataset import CaseItem

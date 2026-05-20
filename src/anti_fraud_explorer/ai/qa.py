@@ -1,7 +1,5 @@
 """Question answering over the anti-fraud dataset."""
 
-from __future__ import annotations
-
 import logging
 import re
 import textwrap

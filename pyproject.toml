@@ -7,7 +7,7 @@ name = "anti-fraud-agent"
 version = "0.1.0"
 description = "反诈案例智能体 — 面向反诈宣传、案例检索与科普提醒的本地 Web 智能体"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "Flask>=3.0,<4",
     "httpx>=0.28,<1",
@@ -32,6 +32,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 100
+target-version = "py314"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

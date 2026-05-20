@@ -1,7 +1,5 @@
 """Intent router — calls the planner model to decide user intent."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..domain.dataset import KnowledgeBase

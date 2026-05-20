@@ -1,7 +1,5 @@
 """Small dependency-free lexical search for the normalized dataset."""
 
-from __future__ import annotations
-
 import logging
 import re
 from collections.abc import Iterable

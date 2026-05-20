@@ -1,7 +1,5 @@
 """Unified HTTP client for all external API calls using httpx."""
 
-from __future__ import annotations
-
 import logging
 import re
 import textwrap

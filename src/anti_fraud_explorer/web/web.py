@@ -1,7 +1,5 @@
 """Flask web app for the anti-fraud case knowledge base."""
 
-from __future__ import annotations
-
 import json
 import re
 

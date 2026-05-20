@@ -11,7 +11,7 @@ from anti_fraud_explorer.domain.dataset import (
 
 pytestmark = pytest.mark.skipif(
     not settings.dataset_path.exists(),
-    reason="Dataset file not found — run scripts/build_dataset.py first",
+    reason="Dataset file not found — run scripts/process_raw_data.py first",
 )
 
 

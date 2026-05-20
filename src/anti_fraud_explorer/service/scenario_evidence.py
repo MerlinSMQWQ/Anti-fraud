@@ -1,7 +1,5 @@
 """Scenario matching with hard evidence separated from soft inferred labels."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from ..domain.dataset import normalize_text

@@ -1,7 +1,5 @@
 """Retrieval-augmented question answering over the anti-fraud dataset."""
 
-from __future__ import annotations
-
 from ..ai.client import (
     build_messages,
     call_chat_model,
