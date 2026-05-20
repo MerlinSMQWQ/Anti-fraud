@@ -11,6 +11,7 @@ from anti_fraud_explorer.domain.dataset import (
     item_to_dict,
     normalize_text,
 )
+from anti_fraud_explorer.service.search import build_search_text
 
 
 pytestmark = pytest.mark.skipif(
@@ -96,6 +97,46 @@ def test_item_to_dict_emits_lists_for_multivalue_fields():
     assert data["entry_channels"] == ["电话", "短信"]
     assert data["impersonated_identity"] == ["冒充客服", "冒充平台官方"]
     assert data["fraud_stage"] == ["接触引流", "诱导操作"]
+
+
+def test_build_search_text_comes_from_search_layer():
+    item = CaseItem(
+        id="FZ-TEST-002",
+        title="测试搜索案例",
+        summary="摘要",
+        nature_judgment="确认诈骗",
+        judgment_reason="理由",
+        entry_channels=("电话", "短信"),
+        impersonated_identity=("冒充客服",),
+        false_belief=("误以为对方是官方",),
+        key_methods=("钓鱼链接",),
+        target_assets=("钱款",),
+        fraud_stage=("接触引流",),
+        risk_signals="风险信号",
+        risk_level="高",
+        loss_occurred="是",
+        loss_type=("金钱损失",),
+        prevention_advice="不要点击",
+        source_name="测试来源",
+        source_type="官方",
+        collection_date="2026-05-20",
+        is_desensitized="是",
+        official_category=("其他/无法对应",),
+        ccl2023_category="虚假购物、服务类",
+        custom_subcategory="测试细分类",
+        tags=("测试", "反诈"),
+        involved_platforms=("短信",),
+        victim_group="普通用户",
+        emergency_plan_id="",
+        law_basis_ids=(),
+        source_links=(),
+        publish_date="",
+        remark="",
+    )
+    search_text = build_search_text(item)
+    assert "测试搜索案例" in search_text
+    assert "钓鱼链接" in search_text
+    assert "冒充客服" in search_text
 
 
 def test_raw_dataset_uses_lists_for_multivalue_fields():

@@ -501,6 +501,8 @@ class Agent:
         collected_items: list[Any], used_queries: list[str],
         total_count: int, warnings: list[str],
     ) -> tuple[AgentResult, AgentDecision]:
+        from .planner import clamp_float
+
         task_type = task_type_from_str(str(payload.get("task_type") or TaskType.FACT_QA.value))
         confidence = clamp_float(payload.get("confidence"), default=0.78)
         reason = normalize_text(payload.get("reason") or "模型根据最近五轮上下文完成回答。")

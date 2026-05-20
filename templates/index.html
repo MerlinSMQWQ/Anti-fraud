@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>识诈</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260515-antifraud-ui') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260520-antifraud-hoverchips') }}" />
   </head>
   <body>
     <div class="scroll-surface">
@@ -72,11 +72,28 @@
             <span id="relatedCount" class="marginalia-count"></span>
           </header>
           <div class="marginalia-search">
-            <input type="text" id="rightSearchInput" placeholder="搜索诈骗案例…" />
-            <button id="rightSearchButton" type="button">检索</button>
+            <input type="text" id="rightSearchInput" placeholder="输入关键词，或直接按条件查询…" />
+            <div class="marginalia-filters" aria-label="案例条件">
+              <label class="filter-field" aria-label="分类">
+                <select id="filterCategory">
+                  <option value="">全部分类</option>
+                </select>
+              </label>
+              <label class="filter-field" aria-label="风险等级">
+                <select id="filterRiskLevel">
+                  <option value="">全部等级</option>
+                </select>
+              </label>
+              <label class="filter-field" aria-label="入口渠道">
+                <select id="filterEntryChannel">
+                  <option value="">全部渠道</option>
+                </select>
+              </label>
+            </div>
+            <button id="rightSearchButton" type="button">查询</button>
           </div>
           <div class="marginalia-list" id="relatedList">
-            <p class="marginalia-empty">输入关键词检索诈骗案例</p>
+            <p class="marginalia-empty">输入关键词，或选择多个条件查询案例</p>
           </div>
         </div>
         <div id="detailMode" class="marginalia-detail" hidden>
@@ -92,6 +109,6 @@
 
     <script src="{{ url_for('static', filename='vendor/purify.min.js', v='3.4.2') }}"></script>
     <script src="{{ url_for('static', filename='vendor/marked.umd.js', v='18.0.3') }}"></script>
-    <script type="module" src="{{ url_for('static', filename='js/main.js', v='20260515-antifraud-ui') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/main.js', v='20260520-antifraud-hoverchips') }}"></script>
   </body>
 </html>

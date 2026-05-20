@@ -1,11 +1,9 @@
 """Flask web app for the anti-fraud case knowledge base."""
 
-import json
-
 from flask import Flask, Response, abort, jsonify, render_template, request, send_file, stream_with_context
 
 from .. import __version__
-from ..agent import Agent, AgentResult, task_type_label
+from ..agent import Agent, task_type_label
 from ..config import settings
 from ..service.conversation import store as conv_store
 from ..domain.dataset import get_knowledge_base, item_to_dict
@@ -50,6 +48,13 @@ def create_app() -> Flask:
     @app.get("/api/meta")
     def meta():
         kb = get_knowledge_base()
+        risk_level_order = ["低", "中", "高", "极高", "无法判断"]
+        risk_levels = risk_level_order
+        entry_channels: list[str] = []
+        for item in kb.items:
+            for channel in item.entry_channels:
+                if channel and channel not in entry_channels:
+                    entry_channels.append(channel)
         return jsonify({
             "app_version": __version__,
             "schema_version": kb.schema_version,
@@ -57,6 +62,8 @@ def create_app() -> Flask:
             "source": kb.source,
             "item_count": len(kb.items),
             "category_count": len(kb.categories),
+            "risk_levels": risk_levels,
+            "entry_channels": entry_channels,
             "categories": [
                 {"id": category.id, "name": category.name, "item_count": category.item_count}
                 for category in kb.categories
@@ -67,10 +74,21 @@ def create_app() -> Flask:
     def items():
         kb = get_knowledge_base()
         query = request.args.get("q", "")
+        category = request.args.get("category", "")
+        risk_level = request.args.get("risk_level", "")
+        entry_channel = request.args.get("entry_channel", "")
         limit = max(int(request.args.get("limit", "30")), 1)
         offset = max(int(request.args.get("offset", "0")), 0)
 
-        result, total = search_items(kb, query=query, limit=limit, offset=offset)
+        result, total = search_items(
+            kb,
+            query=query,
+            category=category,
+            risk_level=risk_level,
+            entry_channel=entry_channel,
+            limit=limit,
+            offset=offset,
+        )
         return jsonify({
             "total": total,
             "limit": limit,
@@ -107,78 +125,97 @@ def create_app() -> Flask:
         context = conv_store.format_context(session_id) if not first_turn else None
         if context is None and isinstance(payload.get("context"), dict):
             context = payload.get("context")
-
-        def generate():
-            agent = Agent(kb)
-            for event in agent.dispatch_stream(
+        agent = Agent(kb)
+        try:
+            result = agent.dispatch(
                 query=question,
                 category=category,
                 include_speech=include_speech,
                 context=context,
-            ):
-                if isinstance(event, AgentResult):
-                    # Extract item context for conversation storage.
-                    item_titles = []
-                    items_full = []
-                    seen_item_ids = set()
-                    for it in (event.items or []):
-                        if not isinstance(it, dict):
-                            continue
-                        title = str(it.get("title") or "").strip()
-                        if title and title not in item_titles:
-                            item_titles.append(title)
-                        item_id = str(it.get("id") or "").strip()
-                        if item_id and item_id not in seen_item_ids:
-                            item = kb.get(item_id)
-                            if item is not None:
-                                items_full.append(item_to_dict(item, include_content=True))
-                                seen_item_ids.add(item_id)
-                        elif not item_id and title:
-                            items_full.append(dict(it))
-                    # Save turn
-                    conv_store.add_turn(
-                        session_id=session_id,
-                        query=question,
-                        answer=event.answer or "",
-                        item_titles=item_titles,
-                        items_full=items_full,
-                    )
-                    result_payload = {
-                        'type': 'result',
-                        'session_id': session_id,
-                        'answer': event.answer,
-                        'speech': event.speech,
-                        'mode': event.mode,
-                        'task_type': event.task_type.value,
-                        'task_label': task_type_label(event.task_type),
-                        'confidence': event.confidence,
-                        'sources': event.sources,
-                        'items': event.items,
-                        'evidence': event.evidence,
-                        'selection_reason': event.selection_reason,
-                        'warnings': event.warnings,
-                        'total_count': event.total_count,
-                        'decision': event.decision,
-                    }
-                    yield f"data: {json.dumps(result_payload, ensure_ascii=False)}\n\n"
-                elif isinstance(event, dict) and event.get("type") == "speech":
-                    speech_text = str(event.get("text") or "")
-                    speech_payload = {
-                        'type': 'speech',
-                        'session_id': session_id,
-                        'text': speech_text,
-                    }
-                    app.logger.info(
-                        "Speech event: text_len=%d",
-                        len(speech_text),
-                    )
-                    yield f"data: {json.dumps(speech_payload, ensure_ascii=False)}\n\n"
-                else:
-                    evt = dict(event)
-                    evt['session_id'] = session_id
-                    yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
+            )
+        except Exception as exc:
+            from ..ai import describe_model_error
 
-        return Response(generate(), mimetype="text/event-stream")
+            app.logger.exception("Ask request failed")
+            warning = describe_model_error(exc)
+            return jsonify({
+                'type': 'result',
+                'session_id': session_id,
+                'answer': f"问答暂时失败：{warning}",
+                'speech': "",
+                'mode': 'fallback',
+                'task_type': 'fact_qa',
+                'task_label': '问答失败',
+                'confidence': 0.0,
+                'sources': [],
+                'items': [],
+                'evidence': [],
+                'selection_reason': "",
+                'warnings': [warning],
+                'total_count': 0,
+                'decision': {},
+            })
+
+        if result is None:
+            return jsonify({
+                'type': 'result',
+                'session_id': session_id,
+                'answer': "问答暂时失败：未生成有效结果。",
+                'speech': "",
+                'mode': 'fallback',
+                'task_type': 'fact_qa',
+                'task_label': '问答失败',
+                'confidence': 0.0,
+                'sources': [],
+                'items': [],
+                'evidence': [],
+                'selection_reason': "",
+                'warnings': ["未生成有效结果。"],
+                'total_count': 0,
+                'decision': {},
+            })
+
+        item_titles = []
+        items_full = []
+        seen_item_ids = set()
+        for it in (result.items or []):
+            if not isinstance(it, dict):
+                continue
+            title = str(it.get("title") or "").strip()
+            if title and title not in item_titles:
+                item_titles.append(title)
+            item_id = str(it.get("id") or "").strip()
+            if item_id and item_id not in seen_item_ids:
+                item = kb.get(item_id)
+                if item is not None:
+                    items_full.append(item_to_dict(item, include_content=True))
+                    seen_item_ids.add(item_id)
+            elif not item_id and title:
+                items_full.append(dict(it))
+        conv_store.add_turn(
+            session_id=session_id,
+            query=question,
+            answer=result.answer or "",
+            item_titles=item_titles,
+            items_full=items_full,
+        )
+        return jsonify({
+            'type': 'result',
+            'session_id': session_id,
+            'answer': result.answer,
+            'speech': result.speech,
+            'mode': result.mode,
+            'task_type': result.task_type.value,
+            'task_label': task_type_label(result.task_type),
+            'confidence': result.confidence,
+            'sources': result.sources,
+            'items': result.items,
+            'evidence': result.evidence,
+            'selection_reason': result.selection_reason,
+            'warnings': result.warnings,
+            'total_count': result.total_count,
+            'decision': result.decision,
+        })
 
     @app.post("/api/tts")
     def create_tts_audio():
@@ -225,7 +262,13 @@ def _item_payload(item, include_content: bool = False) -> dict:
 
 
 def main() -> None:
-    create_app().run(host=settings.host, port=settings.port, debug=settings.debug, threaded=True)
+    create_app().run(
+        host=settings.host,
+        port=settings.port,
+        debug=settings.debug,
+        threaded=True,
+        use_reloader=False,
+    )
 
 
 if __name__ == "__main__":

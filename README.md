@@ -194,6 +194,7 @@ python -m ruff check .
 ## 文档
 
 - [数据采集与标注规范](docs/反诈数据采集与标注规范_简洁专业版_v1.2.docx)
+- [检索设计](docs/检索设计.md)
 
 ## License
 

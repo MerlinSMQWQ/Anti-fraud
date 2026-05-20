@@ -3,7 +3,7 @@ import { speechSupported } from './consts.js';
 import { initHuman } from './human.js';
 import { stopSpeech, unlockSpeech, setVoiceStatus, voiceState, replayLastSpeech, hasReplayableSpeech, pauseSpeechForVisibility, resumeSpeechAfterVisibility } from './speech.js';
 import { renderQuerySuggestions, loadMeta, resizeQuestionInput, syncRestoredQuestion, handleQuestionInput } from './ui.js';
-import { renderRelatedItems, updateRelatedPanelTitle, searchRightPanel, showDetail, hideDetail } from './search.js';
+import { renderRelatedItems, updateRelatedPanelTitle, searchRightPanel, showDetail, hideDetail, loadInitialRandomItems } from './search.js';
 import { askQuestion } from './ask.js';
 
 function init() {
@@ -26,6 +26,9 @@ function init() {
     digitalHumanSpeech: document.querySelector("#digitalHumanSpeech"),
     rightSearchInput: document.querySelector("#rightSearchInput"),
     rightSearchButton: document.querySelector("#rightSearchButton"),
+    filterCategory: document.querySelector("#filterCategory"),
+    filterRiskLevel: document.querySelector("#filterRiskLevel"),
+    filterEntryChannel: document.querySelector("#filterEntryChannel"),
     searchMode: document.querySelector("#searchMode"),
     detailMode: document.querySelector("#detailMode"),
     backToSearch: document.querySelector("#backToSearch"),
@@ -43,6 +46,7 @@ function init() {
   renderQuerySuggestions();
   loadMeta();
   updateRelatedPanelTitle();
+  loadInitialRandomItems();
   syncRestoredQuestion();
 
   // Event listeners

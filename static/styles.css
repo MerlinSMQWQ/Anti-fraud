@@ -1558,14 +1558,18 @@ mark.search-highlight {
 
 .marginalia-search {
   flex: 0 0 auto;
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  position: relative;
 }
 
 .marginalia-search input {
-  flex: 1 1 auto;
+  grid-column: 1;
   min-width: 0;
   padding: 8px 12px;
   border: 1px solid rgba(0, 0, 0, 0.12);
@@ -1588,7 +1592,8 @@ mark.search-highlight {
 }
 
 .marginalia-search button {
-  flex: 0 0 auto;
+  grid-column: 2;
+  grid-row: 1;
   padding: 8px 16px;
   border: none;
   border-radius: 4px;
@@ -1599,6 +1604,81 @@ mark.search-highlight {
   letter-spacing: 1px;
   cursor: pointer;
   font-family: inherit;
+}
+
+.marginalia-filters {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.marginalia-filters:hover,
+.marginalia-filters:focus-within {
+  gap: 8px;
+}
+
+.filter-field {
+  min-width: 0;
+}
+
+.filter-field select {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  min-height: 30px;
+  padding: 4px 28px 4px 10px;
+  border: 1px solid rgba(107, 144, 128, 0.26);
+  border-radius: 999px;
+  background: rgba(107, 144, 128, 0.08);
+  color: var(--celadon-dark);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  font-family: "Noto Serif SC", "STSong", serif;
+  outline: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) calc(50% - 1px),
+    calc(100% - 10px) calc(50% - 1px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  transition:
+    min-width 140ms ease,
+    max-width 140ms ease,
+    width 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.marginalia-filters:hover .filter-field select,
+.marginalia-filters:focus-within .filter-field select {
+  width: 138px;
+  min-width: 138px;
+  max-width: 138px;
+}
+
+.filter-field select:focus {
+  border-color: rgba(194, 58, 43, 0.28);
+  box-shadow: 0 0 0 2px rgba(194, 58, 43, 0.08);
+  background-color: rgba(194, 58, 43, 0.06);
+  color: var(--vermillion);
 }
 
 .marginalia-categories {
@@ -1940,6 +2020,27 @@ mark.search-highlight {
 
   .marginalia-head {
     padding: 14px 16px 0;
+  }
+
+  .marginalia-filters {
+    gap: 6px;
+  }
+
+  .filter-field {
+    min-width: 0;
+  }
+
+  .filter-field select {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+  }
+
+  .marginalia-filters:hover .filter-field select,
+  .marginalia-filters:focus-within .filter-field select {
+    width: 118px;
+    min-width: 118px;
+    max-width: 118px;
   }
 
   .result-items {

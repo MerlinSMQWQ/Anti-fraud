@@ -4,6 +4,11 @@ export const state = {
   currentTaskType: "",
   lastAskContext: null,
   sessionId: "",
+  searchFilters: {
+    category: "",
+    riskLevel: "",
+    entryChannel: "",
+  },
 };
 
 export const els = {};

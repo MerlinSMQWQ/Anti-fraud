@@ -1,6 +1,6 @@
 import { els, state } from './state.js';
 import { pickSuggestionQueries } from './consts.js';
-import { renderRelatedItems, fetchJson } from './search.js';
+import { fetchJson, populateSearchFilters } from './search.js';
 import { renderSuggestionStrip, askQuestion } from './ask.js';
 
 export function resizeQuestionInput() {
@@ -40,16 +40,13 @@ export function renderQuerySuggestions() {
 
 export function syncRestoredQuestion() {
   resizeQuestionInput();
-  const restoredQuery = els.questionInput.value.trim();
-  if (!restoredQuery) {
-    renderRelatedItems([]);
-  }
 }
 
 export async function loadMeta() {
   try {
     const data = await fetchJson("/api/meta");
     els.metaText.textContent = `${data.item_count} 案例 · ${data.category_count} 类`;
+    populateSearchFilters(data);
     if (els.versionBadge) {
       const appVersion = data.app_version ? `v${data.app_version}` : "v?";
       const schemaVersion = data.schema_version ? `s${data.schema_version}` : "";
@@ -57,6 +54,7 @@ export async function loadMeta() {
     }
   } catch {
     els.metaText.textContent = "案例库已就绪";
+    populateSearchFilters({ categories: [], risk_levels: [], entry_channels: [] });
     if (els.versionBadge) {
       els.versionBadge.textContent = "v?";
     }

@@ -18,8 +18,8 @@ export let lastSpeechHumanState = "speaking";
 let pendingSpeechRewrite = false;
 let visibilityInterruptedPlayback = false;
 let visibilityInterruptedMode = "";
-const THINKING_VOICE_URL = "/static/media/thinking.mp3?v=20260515-thinking";
-const REWRITE_VOICE_URL = "/static/media/rewrite.mp3?v=20260515-rewrite";
+const THINKING_VOICE_URL = "/static/media/thinking.mp3?v=20260520-thinking-tiancai";
+const REWRITE_VOICE_URL = "/static/media/rewrite.mp3?v=20260520-rewrite";
 
 function syncVoiceStatusVisuals(value = "") {
   if (!els.voiceToggle) {
@@ -230,10 +230,9 @@ export function stopSpeech(options = {}) {
 }
 
 export function unlockSpeech(withThinkingVoice = false) {
-  if (speechUnlocked) {
-    return;
+  if (!speechUnlocked) {
+    speechUnlocked = true;
   }
-  speechUnlocked = true;
   if (withThinkingVoice) {
     playWarmupAudio(THINKING_VOICE_URL, 0.75);
   }
@@ -347,7 +346,8 @@ export function requestServerSpeech(text, playbackSeq) {
   }
   stopSpeech({ preserveHuman: true, keepPlaybackSeq: true });
   setVoiceState("speaking");
-  setVoiceStatus("正在播报");
+  setVoiceStatus("正在润色播报");
+  playWarmupAudio(REWRITE_VOICE_URL, 0.75);
   currentSpeechSegments = speechPlaybackSegments(text);
   if (currentSpeechSegments.length) {
     return playSpeechSegment(0, playbackSeq);
@@ -360,7 +360,8 @@ export function requestServerSpeechFile(text, playbackSeq) {
     return true;
   }
   setVoiceState("speaking");
-  setVoiceStatus("正在播报");
+  setVoiceStatus("正在润色播报");
+  playWarmupAudio(REWRITE_VOICE_URL, 0.75);
   fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

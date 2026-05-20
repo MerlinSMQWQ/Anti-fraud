@@ -38,11 +38,28 @@ export function itemTagList(item, limit = 4) {
   return tags;
 }
 
-export async function loadRightSearchResults(requestKey) {
+function currentSearchCriteria() {
   const query = els.rightSearchInput?.value?.trim() || "";
-  const params = new URLSearchParams({ q: query, limit: "1000" });
+  const category = els.filterCategory?.value?.trim() || "";
+  const riskLevel = els.filterRiskLevel?.value?.trim() || "";
+  const entryChannel = els.filterEntryChannel?.value?.trim() || "";
+  state.searchFilters = { category, riskLevel, entryChannel };
+  return { query, category, riskLevel, entryChannel };
+}
+
+function buildSearchParams() {
+  const { query, category, riskLevel, entryChannel } = currentSearchCriteria();
+  const params = new URLSearchParams({ limit: "1000" });
+  if (query) params.set("q", query);
+  if (category) params.set("category", category);
+  if (riskLevel) params.set("risk_level", riskLevel);
+  if (entryChannel) params.set("entry_channel", entryChannel);
+  return params;
+}
+
+export async function loadRightSearchResults(requestKey, paramsString = requestKey) {
   try {
-    const data = await fetchJson(`/api/items?${params}`);
+    const data = await fetchJson(`/api/items?${paramsString}`);
     if (requestKey !== rightSearchRequestKey) return;
     renderRelatedItems(data.items, data.total);
   } catch {
@@ -53,16 +70,28 @@ export async function loadRightSearchResults(requestKey) {
 }
 
 export function searchRightPanel() {
-  const query = els.rightSearchInput?.value?.trim() || "";
-  if (!query) {
-    renderRelatedItems([]);
-    return;
-  }
-  const requestKey = query;
+  const params = buildSearchParams();
+  const requestKey = params.toString();
   rightSearchRequestKey = requestKey;
-  els.relatedCount.textContent = "检索中";
-  els.relatedList.innerHTML = `<p class="marginalia-empty is-live">正在检索</p>`;
-  loadRightSearchResults(requestKey);
+  els.relatedCount.textContent = "查询中";
+  els.relatedList.innerHTML = `<p class="marginalia-empty is-live">正在查询</p>`;
+  loadRightSearchResults(requestKey, requestKey);
+}
+
+export async function loadInitialRandomItems() {
+  const requestKey = "initial-random";
+  rightSearchRequestKey = requestKey;
+  els.relatedCount.textContent = "加载中";
+  els.relatedList.innerHTML = `<p class="marginalia-empty is-live">正在加载案例</p>`;
+  try {
+    const data = await fetchJson("/api/items?limit=1000");
+    if (requestKey !== rightSearchRequestKey) return;
+    renderRelatedItems(shuffleItems(data.items), data.total);
+  } catch {
+    if (requestKey === rightSearchRequestKey) {
+      renderRelatedItems([]);
+    }
+  }
 }
 
 export function renderRelatedItems(items, total = items.length) {
@@ -146,4 +175,45 @@ export function updateRelatedPanelTitle() {
   if (els.relatedTitle) {
     els.relatedTitle.textContent = "案例检索";
   }
+}
+
+export function populateSearchFilters(meta) {
+  const preserve = currentSearchCriteria();
+  populateSelect(
+    els.filterCategory,
+    "全部分类",
+    (meta?.categories || []).map((category) => category.name),
+    preserve.category,
+  );
+  populateSelect(
+    els.filterRiskLevel,
+    "全部等级",
+    meta?.risk_levels || [],
+    preserve.riskLevel,
+  );
+  populateSelect(
+    els.filterEntryChannel,
+    "全部渠道",
+    meta?.entry_channels || [],
+    preserve.entryChannel,
+  );
+}
+
+function populateSelect(select, defaultLabel, values, selectedValue = "") {
+  if (!select) return;
+  const options = [`<option value="">${escapeHtml(defaultLabel)}</option>`];
+  for (const value of values) {
+    const selected = value === selectedValue ? " selected" : "";
+    options.push(`<option value="${escapeHtml(value)}"${selected}>${escapeHtml(value)}</option>`);
+  }
+  select.innerHTML = options.join("");
+}
+
+function shuffleItems(items) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
 }

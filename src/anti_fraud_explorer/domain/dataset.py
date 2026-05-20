@@ -66,24 +66,6 @@ class CaseItem:
             parts.append(self.prevention_advice)
         return "\n".join(parts)
 
-    @property
-    def search_text(self) -> str:
-        """Lightweight text for lexical search."""
-        parts = [self.title, self.ccl2023_category, self.custom_subcategory]
-        if self.tags:
-            parts.extend(self.tags)
-        if self.key_methods:
-            parts.extend(self.key_methods)
-        if self.entry_channels:
-            parts.extend(self.entry_channels)
-        if self.impersonated_identity:
-            parts.extend(self.impersonated_identity)
-        if self.official_category:
-            parts.extend(self.official_category)
-        if self.victim_group:
-            parts.append(self.victim_group)
-        return " ".join(parts)
-
 
 class KnowledgeBase:
     def __init__(self, payload: dict[str, Any]):

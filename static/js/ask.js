@@ -360,7 +360,7 @@ function beginAskSession(question) {
   clearSpeechCache();
   stopSpeech({ preserveHuman: true });
   const thinkingStartedAt = performance.now();
-  setDigitalHumanState("thinking", "正在思考", "我先从资料库里找和问题最相关的内容。");
+  setDigitalHumanState("thinking", "正在检索", "我先从资料库里找和问题最相关的内容。");
   unlockSpeech(true);
 
   return { requestId, controller, thinkingStartedAt };
@@ -490,30 +490,18 @@ export async function askQuestion() {
   let speechArrived = false;
 
   try {
-    const payload = await postSseResult("/api/ask", requestData, 65000, session.controller, {
-      onResult(p) {
-        if (voiceEnabled && !speechArrived && p?.answer) {
-          markSpeechRewritePending(true);
-        }
-        presentAskResult(session.requestId, session.controller, question, p, session.thinkingStartedAt);
-      },
-      onSpeech(e) {
-        speechArrived = true;
-        markSpeechRewritePending(false);
-        applyAnswerSpeech(e);
-      },
-    });
-    // If speech arrived before stream ended, it was already handled by onSpeech
-    // Otherwise, speech may be in the result payload (non-streaming fallback)
-    if (!speechArrived && payload?.speech) {
-      markSpeechRewritePending(false);
+    const payload = await postAskResult("/api/ask", requestData, 65000, session.controller);
+    if (payload?.session_id) {
+      state.sessionId = payload.session_id;
+    }
+    presentAskResult(session.requestId, session.controller, question, payload, session.thinkingStartedAt);
+    if (payload?.speech) {
+      speechArrived = true;
       applyAnswerSpeech({
         text: payload.speech,
         speech_audio_url: payload?.speech_audio_url || "",
         speech_engine: payload?.speech_engine || "",
       });
-    } else if (!speechArrived) {
-      markSpeechRewritePending(false);
     }
   } catch (error) {
     markSpeechRewritePending(false);
@@ -523,7 +511,7 @@ export async function askQuestion() {
   }
 }
 
-async function postSseResult(url, data, timeoutMs = 65000, controller = null, callbacks = {}) {
+async function postAskResult(url, data, timeoutMs = 65000, controller = null) {
   const requestController = controller || new AbortController();
   const signal = requestController.signal;
   const timer = window.setTimeout(() => requestController.abort(), timeoutMs);
@@ -540,43 +528,7 @@ async function postSseResult(url, data, timeoutMs = 65000, controller = null, ca
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}`);
     }
-
-    if (!response.body) {
-      return response.json();
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let payload = null;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const event = JSON.parse(line.slice(6));
-        if (event.type === "progress") {
-          if (event.session_id) state.sessionId = event.session_id;
-          applyAskProgress(event);
-        } else if (event.type === "result") {
-          if (event.session_id) state.sessionId = event.session_id;
-          payload = event;
-          callbacks.onResult?.(event);
-        } else if (event.type === "speech") {
-          if (event.session_id) state.sessionId = event.session_id;
-          callbacks.onSpeech?.(event);
-        }
-      }
-    }
-
-    if (!payload) {
-      throw new Error("未收到回答结果");
-    }
-    return payload;
+    return response.json();
   } finally {
     window.clearTimeout(timer);
   }
