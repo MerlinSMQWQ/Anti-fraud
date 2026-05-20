@@ -60,15 +60,11 @@ def create_app() -> Flask:
             "source": kb.source,
             "item_count": len(kb.items),
             "category_count": len(kb.categories),
+            "categories": [
+                {"id": category.id, "name": category.name, "item_count": category.item_count}
+                for category in kb.categories
+            ],
         })
-
-    @app.get("/api/categories")
-    def categories():
-        kb = get_knowledge_base()
-        return jsonify([
-            {"id": category.id, "name": category.name, "item_count": category.item_count}
-            for category in kb.categories
-        ])
 
     @app.get("/api/items")
     def items():
@@ -79,9 +75,6 @@ def create_app() -> Flask:
         keywords = request.args.get("keywords", "")
         limit = max(int(request.args.get("limit", "30")), 1)
         offset = max(int(request.args.get("offset", "0")), 0)
-
-        if request.args.get("stream") == "1":
-            return _stream_items(kb, query, category, risk_level, keywords, limit, offset)
 
         result, total, _structured = _search_items_for_api(
             kb,
@@ -229,6 +222,13 @@ def create_app() -> Flask:
             },
         )
 
+    @app.get("/api/tts/latest")
+    def latest_tts_audio():
+        path = _latest_tts_audio_path()
+        if path is None:
+            abort(404)
+        return send_file(path, mimetype=_tts_mime_type(path.name), conditional=True, max_age=0)
+
     @app.get("/api/tts/<filename>")
     def tts_audio(filename: str):
         if not valid_tts_filename(filename):
@@ -278,6 +278,24 @@ def _speech_audio_payload(speech: str) -> dict:
     }
 
 
+def _latest_tts_audio_path():
+    if not settings.tts_cache_dir.is_dir():
+        return None
+    latest_path = None
+    latest_key = None
+    for path in settings.tts_cache_dir.iterdir():
+        if not path.is_file() or not valid_tts_filename(path.name):
+            continue
+        stat = path.stat()
+        if stat.st_size <= 0:
+            continue
+        candidate_key = (stat.st_mtime_ns, path.name)
+        if latest_key is None or candidate_key > latest_key:
+            latest_key = candidate_key
+            latest_path = path
+    return latest_path
+
+
 def _tts_mime_type(filename: str) -> str:
     if filename.endswith(".mp3"):
         return "audio/mpeg"
@@ -292,37 +310,6 @@ def _tts_extension() -> str:
     from ..config import settings
 
     return settings.volc_tts_encoding.lower()
-
-
-def _stream_items(
-    kb, query: str, category: str, risk_level: str,
-    keywords: str, limit: int, offset: int,
-):
-    """SSE helper: stream unified search results."""
-
-    def generate():
-        # Establish SSE connection to force first chunk flush
-        yield ":ready\n\n"
-
-        result, total, _structured = _search_items_for_api(
-            kb, query=query, category=category,
-            risk_level=risk_level, keywords=keywords,
-            limit=limit, offset=offset,
-        )
-        yield _sse_event({
-            "phase": "results",
-            "total": total,
-            "items": [_item_payload(item) for item in result],
-        })
-
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 def _search_items_for_api(
@@ -483,10 +470,6 @@ def _structured_item_score(item, scenario: str) -> int:
         score += 2
     score += min(len(item.entry_channels), 3)
     return score
-
-
-def _sse_event(data: dict) -> str:
-    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def _item_payload(item, include_content: bool = False) -> dict:

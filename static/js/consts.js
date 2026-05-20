@@ -70,9 +70,8 @@ export const followupQueriesByTask = {
   ],
 };
 
-export const browserSpeechSupported = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 export const audioSpeechSupported = typeof Audio !== "undefined";
-export const speechSupported = browserSpeechSupported || audioSpeechSupported;
+export const speechSupported = audioSpeechSupported;
 export const PROGRESS_STEP_INDEX = {
   classify: 0,
   search: 1,

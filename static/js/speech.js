@@ -1,9 +1,8 @@
-import { browserSpeechSupported, audioSpeechSupported, speechSupported } from './consts.js';
+import { audioSpeechSupported, speechSupported } from './consts.js';
 import { currentHumanState, setDigitalHumanState } from './human.js';
 import { els } from './state.js';
 import { stripMarkdown } from './markdown.js';
 
-let currentUtterance = null;
 let currentSpeechAudio = null;
 let currentWarmupAudio = null;
 let currentSpeechSegments = [];
@@ -13,7 +12,6 @@ let lastSpeechUsesServerTts = false;
 let lastSpeechLang = "zh-CN";
 let speechPlaybackSeq = 0;
 let speechUnlocked = false;
-let speechCancelTimer = 0;
 let speechStartGuardTimer = 0;
 export let voiceState = "idle";
 export let voiceEnabled = true;
@@ -113,15 +111,6 @@ export function pauseSpeechForVisibility() {
     setVoiceStatus("播报已暂停");
     return;
   }
-  if (browserSpeechSupported && currentUtterance && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
-    visibilityInterruptedPlayback = true;
-    visibilityInterruptedMode = "browser";
-    clearSpeechStartGuard();
-    window.speechSynthesis.pause();
-    setVoiceState("idle");
-    setVoiceStatus("播报已暂停");
-    return;
-  }
   visibilityInterruptedPlayback = false;
   visibilityInterruptedMode = "";
   stopSpeech({
@@ -147,14 +136,6 @@ export function resumeSpeechAfterVisibility() {
         speakAnswer(lastSpeechText, lastSpeechAudioUrl, { serverTts: lastSpeechUsesServerTts, lang: lastSpeechLang });
       });
     }
-    return;
-  }
-  if (visibilityInterruptedPlayback && visibilityInterruptedMode === "browser" && currentUtterance) {
-    visibilityInterruptedPlayback = false;
-    visibilityInterruptedMode = "";
-    window.speechSynthesis.resume();
-    setVoiceState("speaking");
-    setVoiceStatus("正在播报");
     return;
   }
   if (visibilityInterruptedPlayback && lastSpeechText) {
@@ -214,12 +195,11 @@ export function speakAnswer(value, audioUrl = "", options = {}) {
   if (options.serverTts) {
     return requestServerSpeech(lastSpeechText, playbackSeq);
   }
-  return speakText(lastSpeechText, playbackSeq, { lang: lastSpeechLang });
+  return requestServerSpeech(lastSpeechText, playbackSeq);
 }
 
 export function finishSpeechPlayback(status = "") {
   clearSpeechStartGuard();
-  currentUtterance = null;
   currentSpeechAudio = null;
   currentSpeechSegments = [];
   visibilityInterruptedPlayback = false;
@@ -246,14 +226,6 @@ export function stopSpeech(options = {}) {
   if (!options.keepPlaybackSeq) {
     currentSpeechSegments = [];
   }
-  if (browserSpeechSupported) {
-    window.clearTimeout(speechCancelTimer);
-    window.speechSynthesis.cancel();
-    if (options.delayed) {
-      speechCancelTimer = window.setTimeout(() => window.speechSynthesis.cancel(), 0);
-    }
-  }
-  currentUtterance = null;
   visibilityInterruptedMode = "";
   syncVoiceIdleState("", options);
   if (!options.preserveHuman && (currentHumanState === "speaking" || currentHumanState === "farewell")) {
@@ -268,11 +240,6 @@ export function unlockSpeech(withThinkingVoice = false) {
   speechUnlocked = true;
   if (withThinkingVoice) {
     playWarmupAudio(THINKING_VOICE_URL, 0.75);
-    warmBrowserSpeech("语音播报已准备", 0.01);
-    return;
-  }
-  if (!warmBrowserSpeech("语音播报已准备", 0.01)) {
-    speechUnlocked = false;
   }
 }
 
@@ -322,24 +289,6 @@ function stopWarmupAudio() {
   currentWarmupAudio = null;
 }
 
-function warmBrowserSpeech(text, volume = 0.01) {
-  if (!browserSpeechSupported) {
-    return false;
-  }
-  try {
-    const warmup = new SpeechSynthesisUtterance(text);
-    warmup.lang = "zh-CN";
-    warmup.rate = 1;
-    warmup.pitch = 1;
-    warmup.volume = volume;
-    window.speechSynthesis.resume();
-    window.speechSynthesis.speak(warmup);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function setVoiceStatus(value) {
   if (els.voiceStatus) {
     els.voiceStatus.textContent = value;
@@ -357,67 +306,10 @@ export function setVoiceState(state) {
   refreshVoiceToggleUI();
 }
 
-export function speakText(text, playbackSeq = ++speechPlaybackSeq, options = {}) {
-  if (!browserSpeechSupported) {
-    setVoiceStatus("浏览器不支持语音");
-    return false;
-  }
-  stopSpeech({ preserveHuman: true, keepPlaybackSeq: true });
-  clearSpeechStartGuard();
-  const lang = normalizeSpeechLang(options.lang || text);
-  const segments = speechPlaybackSegments(text, lang);
-  return playBrowserSpeechSegment(segments, 0, playbackSeq, lang);
-}
-
-export function playBrowserSpeechSegment(segments, index, playbackSeq, lang = "zh-CN") {
-  const text = segments[index] || "";
-  if (!text) {
-    finishSpeechPlayback("");
-    return true;
-  }
-  window.speechSynthesis.resume();
-  const utterance = new SpeechSynthesisUtterance(text);
-  currentUtterance = utterance;
-  utterance.lang = lang;
-  utterance.rate = 1;
-  utterance.pitch = 1;
-
-  const voices = window.speechSynthesis.getVoices();
-  const preferredVoice = pickSpeechVoice(voices, lang);
-  if (preferredVoice) {
-    utterance.voice = preferredVoice;
-  }
-
-  utterance.onstart = () => {
-    if (currentUtterance !== utterance || speechPlaybackSeq !== playbackSeq) return;
-    clearSpeechStartGuard();
-    setVoiceState("speaking");
-    setVoiceStatus("正在播报");
-  };
-  utterance.onend = () => {
-    if (currentUtterance !== utterance || speechPlaybackSeq !== playbackSeq) return;
-    clearSpeechStartGuard();
-    playBrowserSpeechSegment(segments, index + 1, playbackSeq, lang);
-  };
-  utterance.onerror = () => {
-    if (currentUtterance !== utterance || speechPlaybackSeq !== playbackSeq) return;
-    clearSpeechStartGuard();
-    finishSpeechPlayback("自动播报被浏览器拦截");
-  };
-
-  window.speechSynthesis.speak(utterance);
-  speechStartGuardTimer = window.setTimeout(() => {
-    if (currentUtterance !== utterance || speechPlaybackSeq !== playbackSeq) return;
-    if (!window.speechSynthesis.speaking && !window.speechSynthesis.pending) {
-      finishSpeechPlayback("播报未启动");
-    }
-  }, 700);
-  return true;
-}
-
 export function playAudioAnswer(audioUrl, fallbackText = "", playbackSeq = ++speechPlaybackSeq, options = {}) {
   if (!audioSpeechSupported || !audioUrl) {
-    return speakText(fallbackText, playbackSeq, { lang: lastSpeechLang });
+    finishSpeechPlayback(fallbackText ? "音频播报不可用" : "语音暂不可用");
+    return false;
   }
   stopSpeech({ preserveHuman: true, keepPlaybackSeq: true });
   clearSpeechStartGuard();
@@ -438,9 +330,7 @@ export function playAudioAnswer(audioUrl, fallbackText = "", playbackSeq = ++spe
     if (currentSpeechAudio !== audio || speechPlaybackSeq !== playbackSeq) return;
     currentSpeechAudio = null;
     if (options.onError?.()) return;
-    if (!speakText(fallbackText, playbackSeq, { lang: lastSpeechLang })) {
-      finishSpeechPlayback("音频播报失败");
-    }
+    finishSpeechPlayback(fallbackText ? "音频播报失败" : "语音暂不可用");
   };
   const playPromise = audio.play();
   if (playPromise?.catch) {
@@ -448,9 +338,7 @@ export function playAudioAnswer(audioUrl, fallbackText = "", playbackSeq = ++spe
       if (currentSpeechAudio !== audio || speechPlaybackSeq !== playbackSeq) return;
       currentSpeechAudio = null;
       if (options.onError?.()) return;
-      if (!speakText(fallbackText, playbackSeq, { lang: lastSpeechLang })) {
-        finishSpeechPlayback("自动播报被浏览器拦截");
-      }
+      finishSpeechPlayback(fallbackText ? "音频播报失败" : "语音暂不可用");
     });
   }
   return true;
@@ -458,7 +346,8 @@ export function playAudioAnswer(audioUrl, fallbackText = "", playbackSeq = ++spe
 
 export function requestServerSpeech(text, playbackSeq) {
   if (!audioSpeechSupported) {
-    return speakText(text, playbackSeq, { lang: lastSpeechLang });
+    finishSpeechPlayback("音频播报不可用");
+    return false;
   }
   stopSpeech({ preserveHuman: true, keepPlaybackSeq: true });
   setVoiceState("speaking");
@@ -493,15 +382,13 @@ export function requestServerSpeechFile(text, playbackSeq) {
       lastSpeechAudioUrl = audioUrl;
       if (audioUrl) {
         playAudioAnswer(audioUrl, text, playbackSeq);
-      } else if (!speakText(text, playbackSeq, { lang: lastSpeechLang })) {
+      } else {
         finishSpeechPlayback("语音暂不可用");
       }
     })
     .catch(() => {
       if (speechPlaybackSeq !== playbackSeq || lastSpeechText !== text) return;
-      if (!speakText(text, playbackSeq, { lang: lastSpeechLang })) {
-        finishSpeechPlayback("语音整理失败");
-      }
+      finishSpeechPlayback("语音整理失败");
     });
   return true;
 }
@@ -597,23 +484,6 @@ export function normalizeSpeechLang(value) {
   return "zh-CN";
 }
 
-export function pickSpeechVoice(voices, lang = "zh-CN") {
-  if (!Array.isArray(voices) || !voices.length) {
-    return null;
-  }
-  if (lang === "en-US") {
-    const englishVoices = voices.filter((voice) => /en|English/i.test(`${voice.lang} ${voice.name}`));
-    if (!englishVoices.length) {
-      return null;
-    }
-    const preferredFemaleEnglishVoice = englishVoices.find((voice) =>
-      /zira|aria|ava|jenny|emma|samantha|victoria|hazel|susan|sara|sonia|libby|female|woman/i.test(voice.name || ""),
-    );
-    return preferredFemaleEnglishVoice || englishVoices[0] || null;
-  }
-  return voices.find((voice) => /zh|Chinese|普通话|中文/i.test(`${voice.lang} ${voice.name}`)) || null;
-}
-
 export function stripSpeechDecorations(value) {
   return stripMarkdown(value)
     .replace(/[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, " ")
@@ -631,9 +501,9 @@ function syncVoiceIdleState(status = "") {
   if (!voiceEnabled) {
     return;
   }
-  if (!speechSupported) {
+  if (!audioSpeechSupported) {
     setVoiceState("disabled");
-    setVoiceStatus("浏览器不支持语音");
+    setVoiceStatus("当前环境不支持音频播报");
     return;
   }
   setVoiceState("idle");

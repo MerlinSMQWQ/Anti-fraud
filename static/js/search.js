@@ -40,64 +40,17 @@ export function itemTagList(item, limit = 4) {
 }
 
 export async function loadRightSearchResults(requestKey, category = "") {
+  const query = els.rightSearchInput?.value?.trim() || "";
+  const params = new URLSearchParams({ q: query, limit: "1000" });
+  if (category) params.set("category", category);
   try {
-    const query = els.rightSearchInput?.value?.trim() || "";
-    const params = new URLSearchParams({
-      q: query,
-      limit: "1000",
-      stream: "1",
-    });
-    if (category) params.set("category", category);
-
-    try {
-      const response = await fetch(`/api/items?${params}`);
-      if (!response.ok) throw new Error(`${response.status}`);
-      if (requestKey !== rightSearchRequestKey) return;
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (requestKey !== rightSearchRequestKey) {
-          reader.cancel();
-          return;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-            if (event.phase === "results") {
-              renderRelatedItems(event.items, event.total);
-            }
-          } catch {
-            // skip unparseable events
-          }
-        }
-      }
-    } catch {
-      // SSE failed — fall back to plain JSON
-      const plainParams = new URLSearchParams({ q: query, limit: "1000" });
-      if (category) plainParams.set("category", category);
-      try {
-        const data = await fetchJson(`/api/items?${plainParams}`);
-        if (requestKey !== rightSearchRequestKey) return;
-        renderRelatedItems(data.items, data.total);
-      } catch {
-        if (requestKey === rightSearchRequestKey) {
-          renderRelatedItems([]);
-        }
-      }
+    const data = await fetchJson(`/api/items?${params}`);
+    if (requestKey !== rightSearchRequestKey) return;
+    renderRelatedItems(data.items, data.total);
+  } catch {
+    if (requestKey === rightSearchRequestKey) {
+      renderRelatedItems([]);
     }
-  } finally {
-    // done
   }
 }
 
@@ -216,7 +169,8 @@ export function updateRelatedPanelTitle() {
 export async function loadCategoryChips() {
   if (!els.categoryChips) return;
   try {
-    const categories = await fetchJson("/api/categories");
+    const meta = await fetchJson("/api/meta");
+    const categories = meta?.categories;
     if (!Array.isArray(categories) || !categories.length) {
       els.categoryChips.innerHTML = "";
       return;

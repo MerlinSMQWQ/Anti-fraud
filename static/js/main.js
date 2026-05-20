@@ -75,7 +75,7 @@ function init() {
   // Voice toggle — on/off switch
   els.voiceToggle?.addEventListener("click", () => {
     if (!speechSupported) {
-      setVoiceStatus("浏览器不支持语音");
+      setVoiceStatus("当前环境不支持音频播报");
       return;
     }
     if (voiceState === "speaking") {
@@ -87,11 +87,6 @@ function init() {
       return;
     }
     setVoiceStatus("暂无可播报内容");
-  });
-
-  // SpeechSynthesis voice list
-  window.speechSynthesis?.addEventListener?.("voiceschanged", () => {
-    window.speechSynthesis.getVoices();
   });
 
   // Page lifecycle — stop speech
