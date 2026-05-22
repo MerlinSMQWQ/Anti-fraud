@@ -8,7 +8,7 @@ from typing import Any
 
 from ..config import settings
 from ..domain.dataset import KnowledgeBase
-from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
+from ..service.item_cards import enriched_item_card, source_payload, title_with_family
 from ..service.search import (
     LEXICAL_MIN_SCORE,
     normalize_search_query,
@@ -475,7 +475,7 @@ class Agent:
         for item in self.kb.items:
             if category and item.ccl2023_category != category:
                 continue
-            if ref in (item.id, item.title, _title_with_family(item), item.ccl2023_category):
+            if ref in (item.id, item.title, title_with_family(item), item.ccl2023_category):
                 if item.id not in seen:
                     seen.add(item.id)
                     matches.append(item)
@@ -513,8 +513,8 @@ class Agent:
             display_items = self._select_display_items(display_refs, display_pool, fallback_items=[])
         else:
             display_items = self._select_display_items([], display_pool, fallback_items=collected_items)
-        cards = [_enriched_item_card(item) for item in display_items[:8]]
-        sources = [_source_payload(item) for item in display_items[:5]]
+        cards = [enriched_item_card(item) for item in display_items[:8]]
+        sources = [source_payload(item) for item in display_items[:5]]
 
         decision = AgentDecision(
             task_type=task_type,
@@ -563,7 +563,7 @@ class Agent:
         ref = normalize_text(ref)
         if not ref:
             return False
-        return ref in (item.id, item.title, _title_with_family(item), item.ccl2023_category)
+        return ref in (item.id, item.title, title_with_family(item), item.ccl2023_category)
 
     def _subsequent_fallback_result(
         self, query: str, context: dict, collected_items: list[Any],
@@ -584,7 +584,7 @@ class Agent:
                 meta = " | ".join(
                     part for part in [item.ccl2023_category, item.risk_level, item.custom_subcategory] if part
                 )
-                lines.append(f"- **{_title_with_family(item)}**：{meta}")
+                lines.append(f"- **{title_with_family(item)}**：{meta}")
                 if item.summary:
                     lines.append(f"  {item.summary[:140]}")
             if used_queries:
@@ -607,8 +607,8 @@ class Agent:
         result = AgentResult(
             task_type=task_type,
             answer=answer,
-            items=[_enriched_item_card(item) for item in display_items],
-            sources=[_source_payload(item) for item in display_items[:5]],
+            items=[enriched_item_card(item) for item in display_items],
+            sources=[source_payload(item) for item in display_items[:5]],
             mode=mode,
             confidence=0.4,
             warnings=list(warnings),
@@ -705,7 +705,7 @@ class Agent:
         if not title:
             return None
         for item in self.kb.items:
-            if item.title == title or _title_with_family(item) == title:
+            if item.title == title or title_with_family(item) == title:
                 return item
         return None
 

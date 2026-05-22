@@ -25,9 +25,3 @@ def source_payload(item: Any) -> dict[str, str]:
         "ccl2023_category": item.ccl2023_category,
         "custom_subcategory": item.custom_subcategory,
     }
-
-
-# Backward-compatible aliases used while agent modules are being split.
-_enriched_item_card = enriched_item_card
-_title_with_family = title_with_family
-_source_payload = source_payload

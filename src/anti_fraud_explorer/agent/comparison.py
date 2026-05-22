@@ -5,7 +5,7 @@ from typing import Any
 
 from .models import AgentResult, TaskType
 from ..domain.dataset import KnowledgeBase
-from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
+from ..service.item_cards import enriched_item_card, source_payload, title_with_family
 from ..service.retriever import _PROVINCE_PATTERN, _SHORT_PROVINCE_MAP
 from ..text import normalize_text
 
@@ -65,8 +65,8 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
         suggestions: list[Any] = []
         if suggestion_query and not _has_explicit_region_targets(targets):
             suggestions, _ = search_items(kb, query=suggestion_query, limit=4)
-        suggestion_cards = [_enriched_item_card(item) for item in suggestions]
-        suggestion_sources = [_source_payload(item) for item in suggestions]
+        suggestion_cards = [enriched_item_card(item) for item in suggestions]
+        suggestion_sources = [source_payload(item) for item in suggestions]
         missing = unmatched or targets
         missing_text = "、".join(missing)
         answer_lines = [
@@ -83,7 +83,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
                 desc = " · ".join(
                     part for part in [item.ccl2023_category, item.risk_level] if part
                 )
-                answer_lines.append(f"{index}. {_title_with_family(item)}" + (f"（{desc}）" if desc else ""))
+                answer_lines.append(f"{index}. {title_with_family(item)}" + (f"（{desc}）" if desc else ""))
             answer_lines.extend([
                 "",
                 "你可以继续追问这些已收录案例之间的区别，或改问资料库中实际存在的地区化案例。",
@@ -97,7 +97,7 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
         speech = (
             f"资料库中暂时没有可直接对应{missing_text}的条目，所以现在不能做依据式对比。"
             + (
-                f"当前最接近的案例主要有：{'、'.join(_title_with_family(item) for item in suggestions)}。"
+                f"当前最接近的案例主要有：{'、'.join(title_with_family(item) for item in suggestions)}。"
                 if suggestions else ""
             )
         )
@@ -186,8 +186,8 @@ def handle_comparison(kb: KnowledgeBase, analysis) -> AgentResult:
             "item_id": item.id,
         })
 
-    sources = [_source_payload(item) for _, item in resolved]
-    items = [_enriched_item_card(item) for _, item in resolved]
+    sources = [source_payload(item) for _, item in resolved]
+    items = [enriched_item_card(item) for _, item in resolved]
 
     warnings: list[str] = []
     if unmatched:
@@ -279,7 +279,7 @@ def _resolve_comparison_target(kb: KnowledgeBase, target: str, used_item_ids: se
             score += 30
 
         if score > best_score:
-            best = (_title_with_family(item), item)
+            best = (title_with_family(item), item)
             best_score = score
 
     if best_score < 60:

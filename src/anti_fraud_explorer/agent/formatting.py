@@ -3,6 +3,7 @@
 from typing import Any
 
 from ..prompts import FRAUD_LABEL_MAP
+from ..service.item_cards import enriched_item_card, source_payload, title_with_family
 from ..text import normalize_text
 
 
@@ -46,7 +47,7 @@ def items_to_llm_context(items: list[Any], total: int) -> str:
     for i, item in enumerate(items[:30], 1):
         forms = "、".join(item.entry_channels) if item.entry_channels else ""
         lines.append(
-            f"{i}. [{item.id}] {_title_with_family(item)}\n"
+            f"{i}. [{item.id}] {title_with_family(item)}\n"
             f"   类别：{item.ccl2023_category} | 风险等级：{item.risk_level}\n"
             f"   简介：{item.summary[:200]}"
         )
@@ -67,7 +68,7 @@ def items_to_title_context(items: list[Any], total: int) -> str:
         meta = " | ".join(part for part in [item.ccl2023_category, item.risk_level, item.custom_subcategory] if part)
         extra = "；".join(part for part in [f"入口渠道：{forms}" if forms else ""] if part)
         suffix = f" | {extra}" if extra else ""
-        lines.append(f"{i}. [{item.id}] {_title_with_family(item)} | {meta}{suffix}")
+        lines.append(f"{i}. [{item.id}] {title_with_family(item)} | {meta}{suffix}")
     return "\n".join(lines)
 
 
@@ -97,25 +98,10 @@ def candidate_summaries_for_llm(items: list[Any], limit: int) -> str:
     for item in items:
         forms = "、".join(item.entry_channels) if item.entry_channels else "无"
         lines.append(
-            f"[{item.id}] {_title_with_family(item)} | "
+            f"[{item.id}] {title_with_family(item)} | "
             f"{item.ccl2023_category} | {item.risk_level} | "
             f"入口渠道：{forms} | "
             f"{item.summary[:80]}"
         )
     return "\n".join(lines)
 
-
-# helpers from item_cards (keep them here to avoid circular import)
-def _title_with_family(item: Any) -> str:
-    from ..service.item_cards import _title_with_family as f
-    return f(item)
-
-
-def _enriched_item_card(item: Any) -> dict:
-    from ..service.item_cards import _enriched_item_card as f
-    return f(item)
-
-
-def _source_payload(item: Any) -> dict:
-    from ..service.item_cards import _source_payload as f
-    return f(item)

@@ -8,7 +8,7 @@ from typing import Any
 from ..config import settings
 from .models import TaskType, AgentResult
 from ..domain.dataset import KnowledgeBase
-from ..service.item_cards import _enriched_item_card, _source_payload, _title_with_family
+from ..service.item_cards import enriched_item_card, source_payload, title_with_family
 from ..service.scenario_evidence import scenario_match_score, scenario_is_hard_match
 from ..prompts import DEFAULT_TRANSFORM_TYPE, TRANSFORM_MAX_TOKENS, TRANSFORM_PROMPTS
 from ..text import normalize_text
@@ -77,7 +77,7 @@ def handle_study_task(agent: Agent, analysis) -> AgentResult:
     else:
         audience_label = "中小学生"
 
-    title = _title_with_family(target_item)
+    title = title_with_family(target_item)
     category = target_item.ccl2023_category
     summary = target_item.summary[:200]
 
@@ -99,8 +99,8 @@ def handle_study_task(agent: Agent, analysis) -> AgentResult:
         cultural_value=prevention_advice,
     ).strip()
 
-    sources = [_source_payload(target_item)]
-    items = [_enriched_item_card(target_item)]
+    sources = [source_payload(target_item)]
+    items = [enriched_item_card(target_item)]
     evidence = [{
         "type": "source",
         "claim": "教案主体",
@@ -188,8 +188,8 @@ def handle_content_transform(agent: Agent, analysis) -> AgentResult:
             return AgentResult(
                 task_type=TaskType.CONTENT_TRANSFORM,
                 answer=answer_text,
-                sources=[_source_payload(target_item)],
-                items=[_enriched_item_card(target_item)],
+                sources=[source_payload(target_item)],
+                items=[enriched_item_card(target_item)],
                 mode="llm",
                 confidence=0.8,
             )
@@ -200,8 +200,8 @@ def handle_content_transform(agent: Agent, analysis) -> AgentResult:
     return AgentResult(
         task_type=TaskType.CONTENT_TRANSFORM,
         answer=local_answer,
-        items=[_enriched_item_card(target_item)],
-        sources=[_source_payload(target_item)],
+        items=[enriched_item_card(target_item)],
+        sources=[source_payload(target_item)],
         mode="local",
         confidence=0.5,
         warnings=["模型接口不可用，已切回本地模板。如需更丰富的内容，请配置 API Key。"],
@@ -225,14 +225,14 @@ def handle_browse(agent: Agent, analysis) -> AgentResult:
         limit=limit,
     )
 
-    items = [_enriched_item_card(item) for item in result]
+    items = [enriched_item_card(item) for item in result]
     filter_desc = _describe_filters(category, province, level)
     header = f"找到 {total} 条{filter_desc}相关案例：\n" if total else f"未找到匹配的{filter_desc}相关案例。"
     lines = [header]
     for i, item in enumerate(result, 1):
         level_str = f" | {item.risk_level}" if item.risk_level else ""
         subtype_str = f" | {item.custom_subcategory}" if item.custom_subcategory else ""
-        lines.append(f"{i}. {_title_with_family(item)} -- {item.ccl2023_category}{level_str}{subtype_str}")
+        lines.append(f"{i}. {title_with_family(item)} -- {item.ccl2023_category}{level_str}{subtype_str}")
 
     evidence = []
     for item in result:
@@ -255,7 +255,7 @@ def handle_browse(agent: Agent, analysis) -> AgentResult:
         task_type=TaskType.BROWSE_QUERY,
         answer="\n".join(lines),
         items=items,
-        sources=[_source_payload(item) for item in result],
+        sources=[source_payload(item) for item in result],
         evidence=evidence,
         mode="local",
         confidence=0.95,
@@ -352,7 +352,7 @@ def handle_recommend(agent: Agent, analysis) -> AgentResult:
     )
     parts.append("")
     for i, item in enumerate(top, 1):
-        title = _title_with_family(item)
+        title = title_with_family(item)
         display = "、".join(item.entry_channels) if item.entry_channels else "案例讲解、风险提示"
         feature_text = "；".join(item.key_methods) or item.summary
         feature_text = _short_text(feature_text, 150)
@@ -376,7 +376,7 @@ def handle_recommend(agent: Agent, analysis) -> AgentResult:
     selection_reason = f"共推荐 {len(top)} 个案例，排序依据：模型智能选择"
     cards = []
     for item in top:
-        card = _enriched_item_card(item)
+        card = enriched_item_card(item)
         card["reason_tags"] = _item_reason_tags(item, scenario)
         cards.append(card)
 

@@ -17,9 +17,9 @@ def render_template(name: str, **kwargs) -> str:
 
 def build_transform_local(transform_type: str, target_item) -> str:
     """Build a template-based local answer for content transformation."""
-    from ..service.item_cards import _title_with_family
+    from ..service.item_cards import title_with_family
 
-    title = _title_with_family(target_item)
+    title = title_with_family(target_item)
     category = target_item.ccl2023_category
     summary = target_item.summary
     features = "；".join(target_item.key_methods) or summary
