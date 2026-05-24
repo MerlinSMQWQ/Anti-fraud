@@ -99,6 +99,20 @@ class Settings(BaseSettings):
     volc_tts_max_chunk_bytes: int = Field(default=900, alias="VOLC_TTS_MAX_CHUNK_BYTES")
     tts_cache_dir: Path = Field(default=Path("tmp/tts"), alias="TTS_CACHE_DIR")
 
+    # ---- ASR 语音识别（火山引擎） -------------------------------------------
+    volc_asr_enabled: bool = Field(default=True, alias="VOLC_ASR_ENABLED")
+    volc_asr_endpoint: str = Field(
+        default="https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash",
+        alias="VOLC_ASR_ENDPOINT",
+    )
+    volc_asr_api_key: str = Field(default="", alias="VOLC_ASR_API_KEY")
+    volc_asr_app_id: str = Field(default="", alias="VOLC_ASR_APP_ID")
+    volc_asr_access_token: str = Field(default="", alias="VOLC_ASR_ACCESS_TOKEN")
+    volc_asr_resource_id: str = Field(
+        default="volc.bigasr.auc_turbo", alias="VOLC_ASR_RESOURCE_ID"
+    )
+    volc_asr_timeout: float = Field(default=30.0, alias="VOLC_ASR_TIMEOUT")
+
     # ---- 路径处理：相对路径自动转为项目根目录下的绝对路径 ----------------
     @field_validator(
         "dataset_path",

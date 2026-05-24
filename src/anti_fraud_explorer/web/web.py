@@ -19,6 +19,11 @@ from ..config import PROJECT_ROOT, settings
 from ..domain.dataset import get_knowledge_base, item_to_dict
 from ..service.conversation import store as conv_store
 from ..service.search import search_items
+from ..service.asr import (
+    asr_available,
+    recognize_speech,
+    VolcASRError,
+)
 from ..service.tts import (
     openai_tts_available,
     server_tts_engine,
@@ -183,6 +188,33 @@ def create_app() -> Flask:
         if not path.is_file():
             abort(404)
         return send_file(path, conditional=True, max_age=3600)
+
+    @app.post("/api/asr")
+    def asr_recognize():
+        audio_data = request.get_data()
+        if not audio_data:
+            return jsonify({"error": "no_audio_data"}), 400
+
+        content_type = request.content_type or ""
+        format_hint = "webm"
+        if "audio/webm" in content_type:
+            format_hint = "webm"
+        elif "audio/ogg" in content_type:
+            format_hint = "ogg"
+        elif "audio/wav" in content_type:
+            format_hint = "wav"
+        elif "audio/mp3" in content_type or "audio/mpeg" in content_type:
+            format_hint = "mp3"
+
+        try:
+            text = recognize_speech(audio_data, format=format_hint)
+            return jsonify({"text": text})
+        except VolcASRError as exc:
+            app.logger.warning("ASR failed: %s", exc)
+            return jsonify({"error": str(exc)}), 503
+        except Exception:
+            app.logger.exception("ASR unexpected error")
+            return jsonify({"error": "asr_unavailable"}), 503
 
     return app
 
